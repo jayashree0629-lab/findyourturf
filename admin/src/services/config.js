@@ -12,7 +12,7 @@ function getBackendBaseUrl() {
   }
 
   // Production fallback if VITE_API_URL was not set at build time.
-  return clean("https://findyourturf.onrender.com");
+  return clean("https://findyourturf-307m.onrender.com");
 }
 
 export const API_URL = getBackendBaseUrl();

@@ -53,6 +53,16 @@ function isAllowedOrigin(origin) {
   return false;
 }
 
+// Marker so the error handler below can tell a CORS rejection apart from any
+// other error, without inspecting the (browser-supplied, spoofable) message.
+class CorsOriginError extends Error {
+  constructor(origin) {
+    super(`CORS blocked origin: ${origin}`);
+    this.name = "CorsOriginError";
+    this.origin = origin;
+  }
+}
+
 const corsOptions = {
   origin(origin, callback) {
     if (isAllowedOrigin(origin)) {
@@ -60,13 +70,24 @@ const corsOptions = {
       return;
     }
 
-    callback(new Error(`CORS blocked origin: ${origin}`));
+    callback(new CorsOriginError(origin));
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   optionsSuccessStatus: 204,
 };
+
+// Safe, non-sensitive request log: method + path + origin + whether CORS
+// allowed it. No headers, bodies, tokens or credentials are ever logged.
+// Cheap enough to leave on permanently — it's the only visibility Render's
+// dashboard gives you into "which origin got rejected and when".
+app.use((req, res, next) => {
+  const origin = req.headers.origin || "(no origin)";
+  const allowed = isAllowedOrigin(req.headers.origin);
+  console.log(`[req] ${req.method} ${req.path} | origin=${origin} | corsAllowed=${allowed}`);
+  next();
+});
 
 const io = new Server(server, {
   cors: {
@@ -129,6 +150,33 @@ app.use("/api/users", userRoutes);
 
 const liveMatchRoutes = require("./routes/liveMatchRoutes");
 app.use("/api/live-matches", liveMatchRoutes);
+
+// 404 for unknown API paths — keeps the response JSON instead of Express's
+// default HTML page, matching every other route in this app.
+app.use("/api", (req, res) => {
+  res.status(404).json({ success: false, message: "Not found" });
+});
+
+// Central error handler (must be defined last, with all 4 params, for
+// Express to treat it as one). A rejected CORS origin — the `cors` package
+// calls next(err) internally when its origin callback receives an Error —
+// previously fell through to Express's default HTML 500 page with no CORS
+// headers, which is indistinguishable from a real server crash both to
+// curl/log output and, from the browser, to any other "Failed to fetch".
+// This turns that into a clean, correctly-coded JSON response instead.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (err instanceof CorsOriginError) {
+    console.log(`[cors] rejected origin=${err.origin} on ${req.method} ${req.path}`);
+    return res.status(403).json({
+      success: false,
+      message: "This origin is not allowed to access the API. Add it to CLIENT_ORIGINS."
+    });
+  }
+
+  console.error("Unhandled error:", err.message);
+  res.status(500).json({ success: false, message: "Something went wrong." });
+});
 
 io.on("connection", (socket) => {
   console.log("✅ Client connected:", socket.id);
