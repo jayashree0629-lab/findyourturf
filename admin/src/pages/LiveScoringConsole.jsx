@@ -24,6 +24,7 @@ export default function LiveScoringConsole() {
   const navigate = useNavigate();
 
   const [match, setMatch] = useState(null);
+  const [matchType, setMatchType] = useState(null); // "LIVE" | "COMPLETED"
   const [ballEvents, setBallEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -37,6 +38,7 @@ export default function LiveScoringConsole() {
       const data = await getLiveMatchDetails(matchId);
       if (data.success) {
         setMatch(data.match);
+        setMatchType(data.type || "LIVE");
         setBallEvents(data.ballEvents || []);
         setError("");
       } else {
@@ -186,6 +188,68 @@ export default function LiveScoringConsole() {
 
   if (loading) return <div style={{ padding: 40, textAlign: "center" }}>Loading match data...</div>;
   if (!match) return <div style={{ padding: 40, textAlign: "center" }}>{error || "Match not found."}</div>;
+
+  // Archived match: a CompletedMatch document, not a LiveMatch. Its shape is
+  // completely different (snapshot team names, `scorecards` instead of
+  // `state`/`score`), and there is nothing left to score or undo — show a
+  // read-only result summary instead of the live console.
+  if (matchType === "COMPLETED") {
+    const first = match.scorecards?.firstInnings || {};
+    const second = match.scorecards?.secondInnings || {};
+    const teamAName = match.teamA?.nameSnapshot || match.teamA?.shortNameSnapshot || "Team A";
+    const teamBName = match.teamB?.nameSnapshot || match.teamB?.shortNameSnapshot || "Team B";
+
+    const inningsCard = (label, teamName, inn) => (
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.4 }}>
+          {label}
+        </div>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 14, marginTop: 6, flexWrap: "wrap" }}>
+          <h3 style={{ margin: 0 }}>{inn.team || teamName}</h3>
+          <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1 }}>
+            {inn.runs || 0}/{inn.wickets || 0}
+          </div>
+          <div style={{ fontSize: 16, color: "#475569" }}>
+            ({inn.oversDisplay || "0.0"} ov)
+          </div>
+        </div>
+        <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>Extras {inn.extras || 0}</div>
+      </div>
+    );
+
+    return (
+      <div style={{ padding: 20, maxWidth: 780, margin: "0 auto" }}>
+        <button className="btn btn-outline" onClick={() => navigate(-1)} style={{ marginBottom: 16 }}>
+          <IconArrowLeft size={16} /> Back to Matches
+        </button>
+
+        {error && (
+          <div className="alert-banner error" role="alert" style={{ marginBottom: 16 }}>
+            {error}
+          </div>
+        )}
+
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <h3 style={{ margin: 0 }}>{match.matchName}</h3>
+            <span className="filter-pill active" style={{ backgroundColor: "#64748b", color: "#fff", border: "none" }}>
+              COMPLETED
+            </span>
+          </div>
+          <div style={{ fontSize: 13, color: "#64748b", marginTop: 6 }}>
+            {match.format} · {match.overs} Overs{match.venueSnapshot ? ` · ${match.venueSnapshot}` : ""}
+          </div>
+        </div>
+
+        <div className="card" style={{ marginBottom: 16, background: "#eef8f0", color: "#157f3b", fontWeight: 700, textAlign: "center" }}>
+          {match.resultText || (match.winner ? `${match.winner} won` : "Match completed")}
+        </div>
+
+        {inningsCard("1st Innings", teamAName, first)}
+        {inningsCard("2nd Innings", teamBName, second)}
+      </div>
+    );
+  }
 
   const status = d.s.status;
   const canScore = !actionLoading && status === "LIVE";

@@ -358,9 +358,25 @@ exports.getAdminMatches = async (req, res) => {
 exports.getMatchDetails = async (req, res) => {
   try {
     const match = await LiveMatch.findById(req.params.id);
-    if (!match) return res.status(404).json({ success: false, error: "Match not found" });
-    const ballEvents = await BallEvent.find({ matchId: match._id }).sort({ sequenceNumber: 1 });
-    res.json({ success: true, match, ballEvents });
+    if (match) {
+      const ballEvents = await BallEvent.find({ matchId: match._id }).sort({ sequenceNumber: 1 });
+      return res.json({ success: true, type: "LIVE", match, ballEvents });
+    }
+
+    // Not a live match — the admin "Completed" tab lists archived matches by
+    // their own CompletedMatch._id, which never exists in LiveMatch (either
+    // it was deleted on "End Match", or it never had a matching id at all
+    // since the archive gets its own _id). Fall back to the archive, the
+    // same way the public scorecard endpoint already does.
+    const completedMatch =
+      (await CompletedMatch.findById(req.params.id).catch(() => null)) ||
+      (await CompletedMatch.findOne({ sourceMatchId: req.params.id }).catch(() => null));
+
+    if (completedMatch) {
+      return res.json({ success: true, type: "COMPLETED", match: completedMatch, ballEvents: [] });
+    }
+
+    res.status(404).json({ success: false, error: "Match not found" });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
