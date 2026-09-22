@@ -895,6 +895,7 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
+      <Route path="/login" element={<QuickRegister onComplete={() => setVisitorReady(true)} />} />
       <Route path="/tournaments" element={<TournamentsPage />} />
       <Route path="/tournaments/:id" element={<TournamentDetails />} />
       <Route path="/events" element={<TournamentsPage />} />
