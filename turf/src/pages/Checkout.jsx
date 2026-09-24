@@ -18,6 +18,8 @@ import {
   Wallet,
   Smartphone,
   CreditCard,
+  MessageSquare,
+  ExternalLink,
   Camera,
   Video,
   Dumbbell,
@@ -165,6 +167,7 @@ export default function Checkout() {
   const [confirmed, setConfirmed] = useState(null);
 
   const turf = state?.turf;
+  const isSplitEligible = Boolean(turf);
   const startMinutes = state?.startMinutes ?? 0;
   const isEveningSlot = startMinutes >= 18 * 60;
 
@@ -176,6 +179,8 @@ export default function Checkout() {
   const [payMode, setPayMode] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("UPI");
   const [upiId, setUpiId] = useState("");
+  const [paymentPlan, setPaymentPlan] = useState("full");
+  const [splitMembers, setSplitMembers] = useState([]);
 
   // --- Add-ons ---
   const [addonsByType, setAddonsByType] = useState({ photography: [], videography: [], coach: [], equipment: [] });
@@ -340,6 +345,15 @@ export default function Checkout() {
       setError("Enter a valid UPI ID (e.g. name@okhdfc) or leave it blank.");
       return;
     }
+    const invitedMembers = splitMembers.filter((member) => member.phone.trim());
+    if (isSplitEligible && paymentPlan === "split" && invitedMembers.length < players - 1) {
+      setError(`Add a mobile number for all ${players - 1} teammates before sending the payment links.`);
+      return;
+    }
+    if (isSplitEligible && paymentPlan === "split" && invitedMembers.some((member) => member.sendMethod === "gpay" && !member.gpayNumber)) {
+      setError("Add a GPay number for every teammate selected for direct GPay sharing.");
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -355,8 +369,10 @@ export default function Checkout() {
         equipment: equipmentNames,
         addons: addonPayload,
         paymentMethod,
+        paymentPlan: isSplitEligible ? paymentPlan : "full",
+        splitMembers: isSplitEligible && paymentPlan === "split" ? invitedMembers : [],
         contact: { name: profile.name, phone: profile.phone, email: profile.email },
-        status: "Confirmed",
+        status: isSplitEligible && paymentPlan === "split" ? "Pending" : "Confirmed",
       });
 
       const booking = res.booking || {};
@@ -375,10 +391,11 @@ export default function Checkout() {
         addonsAmount: booking.addonsAmount ?? price.addonsAmount,
         totalAmount: booking.totalAmount ?? price.total,
         addons: addonLines.map((l) => ({ name: l.name, quantity: l.quantity, lineTotal: l.lineTotal })),
-        status: "Confirmed",
+        status: isSplitEligible && paymentPlan === "split" ? "Pending" : "Confirmed",
         bookedBy: profile.name,
         phone: profile.phone,
         paymentMethod,
+        paymentPlan,
       });
 
       setConfirmed({
@@ -386,6 +403,10 @@ export default function Checkout() {
         perPerson: booking.perPersonAmount ?? price.perPerson,
         players: booking.players || players,
         addons: addonLines,
+        paymentPlan: isSplitEligible ? paymentPlan : "full",
+        splitMembers: isSplitEligible && paymentPlan === "split" ? invitedMembers : [],
+        splitPaymentStatus: isSplitEligible && paymentPlan === "split" ? "Pending" : "NotApplicable",
+        status: isSplitEligible && paymentPlan === "split" ? "Pending" : "Confirmed",
       });
       setSuccess(true);
     } catch (err) {
@@ -400,6 +421,26 @@ export default function Checkout() {
     }
   };
 
+  const splitAmount = price.perPerson;
+  const splitMemberCount = Math.max(0, players - 1);
+  const createEmptyMembers = (count) =>
+    Array.from({ length: count }, () => ({ name: "", phone: "", gpayNumber: "", sendMethod: "sms" }));
+  const updateSplitMember = (index, field, value) => {
+    setSplitMembers((members) =>
+      members.map((member, memberIndex) => (memberIndex === index ? { ...member, [field]: value } : member))
+    );
+  };
+  const setPlayerCount = (nextPlayers) => {
+    setPlayers(nextPlayers);
+    if (paymentPlan === "split") {
+      setSplitMembers((members) => {
+        const next = createEmptyMembers(Math.max(0, nextPlayers - 1));
+        return next.map((member, index) => ({ ...member, ...(members[index] || {}) }));
+      });
+    }
+  };
+  const isSplitPending = confirmed?.paymentPlan === "split" && confirmed.status === "Pending";
+
   // ---------------- SUCCESS ----------------
   if (success && confirmed) {
     return (
@@ -411,13 +452,15 @@ export default function Checkout() {
               <div className="fyt-success-icon-badge">
                 <CheckCircle2 size={48} />
               </div>
-              <span className="fyt-success-badge-pill">
-                <Sparkles size={14} /> Booking Confirmed
+              <span className={`fyt-success-badge-pill ${isSplitPending ? "fyt-pending-badge" : ""}`}>
+                {isSplitPending ? <Clock size={14} /> : <Sparkles size={14} />} {isSplitPending ? "Payment Pending" : "Booking Confirmed"}
               </span>
-              <h1 className="fyt-success-title">Get Ready to Play!</h1>
+              <h1 className="fyt-success-title">{isSplitPending ? "Your slot is on hold" : "Get Ready to Play!"}</h1>
               <p className="fyt-success-subtitle">
-                Your slot at <strong>{turf.name}</strong> is locked in. Confirmation sent to{" "}
-                <strong>+91 {profile?.phone}</strong>.
+                {isSplitPending
+                  ? <>You paid your share. We’ll confirm <strong>{turf.name}</strong> automatically after every teammate pays.</>
+                  : <>Your slot at <strong>{turf.name}</strong> is locked in. Confirmation sent to{" "}
+                    <strong>+91 {profile?.phone}</strong>.</>}
               </p>
 
               <div className="fyt-receipt-card">
@@ -461,20 +504,37 @@ export default function Checkout() {
                   </div>
                 )}
 
-                <div
-                  className="fyt-receipt-status-banner"
-                  style={{ background: "#ecfdf5", color: "#047857", justifyContent: "center", fontWeight: 700 }}
-                >
-                  <Users size={15} />
-                  <span>
-                    Split {confirmed.players} ways · <strong>₹{confirmed.perPerson} per person</strong>
-                  </span>
-                </div>
+                {confirmed.paymentPlan === "split" && (
+                  <>
+                    {isSplitPending && (
+                    <div className="fyt-split-status-card">
+                      <div className="fyt-split-status-title"><Clock size={17} /> Waiting for team payments</div>
+                      <p>Payment links were created for your teammates. The turf remains on hold until all shares are paid.</p>
+                      <div className="fyt-split-status-list">
+                        <div><span className="fyt-status-dot paid" /> You · ₹{confirmed.perPerson} paid</div>
+                        {(confirmed.splitMembers || []).map((member) => (
+                          <div key={member.phone}><span className="fyt-status-dot" /> {member.name || member.phone} · ₹{confirmed.perPerson} pending</div>
+                        ))}
+                      </div>
+                    </div>
+                    )}
+
+                    <div
+                      className="fyt-receipt-status-banner"
+                      style={{ background: isSplitPending ? "#fff7ed" : "#ecfdf5", color: isSplitPending ? "#c2410c" : "#047857", justifyContent: "center", fontWeight: 700 }}
+                    >
+                      {isSplitPending ? <Clock size={15} /> : <Users size={15} />}
+                      <span>
+                        {isSplitPending ? "Booking status: Pending payment" : `Split ${confirmed.players} ways · ₹${confirmed.perPerson} per person`}
+                      </span>
+                    </div>
+                  </>
+                )}
 
                 <div className="fyt-receipt-status-banner">
                   <span className="fyt-confirmed-dot" />
                   <span>
-                    Status: <strong>Confirmed &amp; Paid ({paymentMethod})</strong>
+                    Status: <strong>{isSplitPending ? "Your share paid · Team payment pending" : `Confirmed &amp; Paid (${paymentMethod})`}</strong>
                   </span>
                 </div>
               </div>
@@ -541,7 +601,9 @@ export default function Checkout() {
               <ArrowLeft size={18} />
               <span>Back to Details</span>
             </button>
-            <h2 className="fyt-checkout-header-title">Add-ons &amp; Split Payment</h2>
+            <h2 className="fyt-checkout-header-title">
+              Add-ons {isSplitEligible ? "& Split Payment" : "& Payment"}
+            </h2>
           </div>
 
           <div className="fyt-checkout-grid">
@@ -550,7 +612,14 @@ export default function Checkout() {
               {/* Venue summary */}
               <div className="fyt-card fyt-checkout-venue-card">
                 <div className="fyt-cvc-header">
-                  <img src={turfImage} alt={turf.name} className="fyt-cvc-img" />
+                  <img
+                    src={turfImage}
+                    alt={turf.name}
+                    className="fyt-cvc-img"
+                    onError={(event) => {
+                      event.currentTarget.src = "/cricket-turf.jpg";
+                    }}
+                  />
                   <div className="fyt-cvc-info">
                     <span className="fyt-badge-tag">{(turf.sports && turf.sports[0]) || turf.sportType || "Turf"}</span>
                     <h3 className="fyt-cvc-name">{turf.name}</h3>
@@ -584,11 +653,11 @@ export default function Checkout() {
                   The total (turf + add-ons) is split equally between everyone.
                 </p>
                 <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                  <button className="fyt-action-circle" onClick={() => setPlayers((p) => Math.max(1, p - 1))} aria-label="Fewer players">
+                  <button className="fyt-action-circle" onClick={() => setPlayerCount(Math.max(1, players - 1))} aria-label="Fewer players">
                     <Minus size={18} />
                   </button>
                   <strong style={{ fontSize: "1.8rem", minWidth: 48, textAlign: "center" }}>{players}</strong>
-                  <button className="fyt-action-circle" onClick={() => setPlayers((p) => Math.min(40, p + 1))} aria-label="More players">
+                  <button className="fyt-action-circle" onClick={() => setPlayerCount(Math.min(40, players + 1))} aria-label="More players">
                     <Plus size={18} />
                   </button>
                   <div style={{ marginLeft: "auto", textAlign: "right" }}>
@@ -906,14 +975,90 @@ export default function Checkout() {
                     </div>
 
                     {paymentMethod === "UPI" && (
-                      <div className="fyt-form-group">
-                        <label>UPI ID (optional for this demo)</label>
-                        <input type="text" className="fyt-input" placeholder="yourname@okhdfc" value={upiId} onChange={(e) => setUpiId(e.target.value)} />
-                      </div>
+                      <>
+                        <div className="fyt-form-group">
+                          <label>UPI ID (optional for this demo)</label>
+                          <input type="text" className="fyt-input" placeholder="yourname@okhdfc" value={upiId} onChange={(e) => setUpiId(e.target.value)} />
+                        </div>
+
+                        {isSplitEligible && (
+                          <div className="fyt-payment-plan-toggle" role="group" aria-label="Payment amount">
+                            <button type="button" className={paymentPlan === "full" ? "active" : ""} onClick={() => setPaymentPlan("full")}>
+                              <span>Pay full amount</span>
+                              <strong>₹{price.total}</strong>
+                            </button>
+                            <button type="button" className={paymentPlan === "split" ? "active" : ""} onClick={() => {
+                              setPaymentPlan("split");
+                              setSplitMembers((members) => {
+                                const next = createEmptyMembers(Math.max(0, players - 1));
+                                return next.map((member, index) => ({ ...member, ...(members[index] || {}) }));
+                              });
+                            }}>
+                              <span>Split by team size</span>
+                              <strong>₹{splitAmount} each</strong>
+                            </button>
+                          </div>
+                        )}
+
+                        {isSplitEligible && paymentPlan === "split" && (
+                          <div className="fyt-split-pay-panel">
+                            <div className="fyt-split-pay-heading">
+                              <div className="fyt-split-icon"><Users size={20} /></div>
+                              <div>
+                                <strong>Split ₹{price.total} between {players} players</strong>
+                                <span>You pay ₹{splitAmount} · Add {splitMemberCount} teammates</span>
+                              </div>
+                            </div>
+
+                            <div className="fyt-invite-header">
+                              <div>
+                                <strong>Send each share</strong>
+                                <span>Choose SMS or send directly to their GPay number.</span>
+                              </div>
+                              <MessageSquare size={18} />
+                            </div>
+                            <div className="fyt-invite-list">
+                              {splitMembers.length === splitMemberCount && splitMembers.map((member, index) => (
+                                <div className="fyt-invite-row" key={index}>
+                                  <input
+                                    className="fyt-input"
+                                    placeholder={`Player ${index + 1} name`}
+                                    value={member.name}
+                                    onChange={(e) => updateSplitMember(index, "name", e.target.value)}
+                                  />
+                                  <input
+                                    className="fyt-input"
+                                    placeholder="10-digit mobile"
+                                    inputMode="numeric"
+                                    value={member.phone}
+                                    onChange={(e) => updateSplitMember(index, "phone", e.target.value.replace(/\D/g, "").slice(0, 10))}
+                                  />
+                                  <input
+                                    className="fyt-input"
+                                    placeholder="GPay number"
+                                    inputMode="numeric"
+                                    value={member.gpayNumber}
+                                    onChange={(e) => updateSplitMember(index, "gpayNumber", e.target.value.replace(/\D/g, "").slice(0, 10))}
+                                  />
+                                  <div className="fyt-share-options" role="group" aria-label={`Send Player ${index + 1} payment`}>
+                                    <button type="button" className={member.sendMethod === "sms" ? "active" : ""} onClick={() => updateSplitMember(index, "sendMethod", "sms")}>
+                                      <MessageSquare size={13} /> SMS
+                                    </button>
+                                    <button type="button" className={member.sendMethod === "gpay" ? "active" : ""} onClick={() => updateSplitMember(index, "sendMethod", "gpay")}>
+                                      <ExternalLink size={13} /> GPay
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            <p className="fyt-split-note">Payment stays pending until every teammate completes their ₹{splitAmount} share.</p>
+                          </div>
+                        )}
+                      </>
                     )}
 
                     <button className="fyt-btn-pay" onClick={handlePay} disabled={loading} style={{ marginTop: 6 }}>
-                      {loading ? "Processing payment…" : `Pay ₹${price.total} & Confirm`}
+                      {loading ? "Processing payment…" : `Pay ₹${isSplitEligible && paymentPlan === "split" ? splitAmount : price.total} & Confirm`}
                     </button>
                     <button className="fyt-btn-secondary" onClick={() => setPayMode(false)} disabled={loading} style={{ width: "100%", marginTop: 8 }}>
                       Back to review
@@ -942,7 +1087,7 @@ export default function Checkout() {
           </span>
         </div>
         <button className="fyt-smb-btn" onClick={payMode ? handlePay : startPayment} disabled={loading}>
-          {loading ? "…" : payMode ? `Pay ₹${price.total}` : "Proceed to Payment"}
+          {loading ? "…" : payMode ? `Pay ₹${isSplitEligible && paymentPlan === "split" ? splitAmount : price.total}` : "Proceed to Payment"}
         </button>
       </div>
     </div>

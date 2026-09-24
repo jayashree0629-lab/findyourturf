@@ -56,9 +56,9 @@ export default function BookTurf() {
       try {
         setLoading(true);
         const data = await getTurfs();
-        const list = (Array.isArray(data) ? data : []).filter(
-          (t) => t.status !== "Inactive" && t.available !== false
-        );
+        // The booking catalogue shows every configured turf. Slot availability
+        // is checked on the detail/checkout flow instead of hiding venues here.
+        const list = Array.isArray(data) ? data : [];
         setTurfs(list);
       } catch (err) {
         console.error("Failed to load turfs:", err);

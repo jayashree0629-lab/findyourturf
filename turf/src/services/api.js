@@ -169,6 +169,13 @@ export async function createBooking(bookingData) {
   return data;
 }
 
+export async function markSplitPayment(bookingId, phone) {
+  return request(`/api/bookings/${bookingId}/split-payments`, {
+    method: "POST",
+    body: JSON.stringify({ phone })
+  });
+}
+
 // --- Live matches ---
 export async function getLiveMatches() {
   const data = await request("/api/live-matches/live");

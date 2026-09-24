@@ -215,6 +215,8 @@ router.post("/", async (req, res) => {
             addons,
             contact = {},
             paymentMethod,
+            paymentPlan = "full",
+            splitMembers = [],
             status
         } = req.body;
 
@@ -227,9 +229,6 @@ router.post("/", async (req, res) => {
         const turfDoc = await Turf.findById(turf);
         if (!turfDoc) {
             return res.status(404).json({ message: "Turf not found" });
-        }
-        if (turfDoc.available === false || turfDoc.status === "Inactive") {
-            return res.status(400).json({ message: "This turf is not accepting bookings right now." });
         }
         if (turfDoc.pricePerHour == null || turfDoc.pricePerHour <= 0) {
             return res.status(400).json({
@@ -282,6 +281,24 @@ router.post("/", async (req, res) => {
         const contactPhone = String(contact.phone || "").trim();
         const contactEmail = String(contact.email || "").trim().toLowerCase();
 
+        const normalizedSplitMembers = paymentPlan === "split"
+            ? splitMembers
+                .filter((member) => member && String(member.phone || "").trim())
+                .map((member) => ({
+                    name: String(member.name || "").trim(),
+                    phone: String(member.phone).trim(),
+                    gpayNumber: String(member.gpayNumber || "").trim(),
+                    sendMethod: member.sendMethod === "gpay" ? "gpay" : "sms",
+                    paid: false
+                }))
+            : [];
+        const isSplit = paymentPlan === "split";
+        if (isSplit && normalizedSplitMembers.length !== Math.max(0, price.players - 1)) {
+            return res.status(400).json({
+                message: `Split payment needs ${Math.max(0, price.players - 1)} teammate phone number(s).`
+            });
+        }
+
         const booking = await Booking.create({
             user: linkedUserId,
             turf,
@@ -301,7 +318,10 @@ router.post("/", async (req, res) => {
             contactPhone,
             contactEmail,
             paymentMethod: paymentMethod || "UPI",
-            status: status === "Pending" ? "Pending" : "Confirmed"
+            paymentPlan: isSplit ? "split" : "full",
+            splitMembers: normalizedSplitMembers,
+            splitPaymentStatus: isSplit ? "Pending" : "NotApplicable",
+            status: isSplit || status === "Pending" ? "Pending" : "Confirmed"
         });
 
         // --- Persist each add-on. Roll the whole booking back on any failure. ---
@@ -343,6 +363,7 @@ router.post("/", async (req, res) => {
             bookingDate: day.toISOString(),
             startTime
         });
+
         if (addonDocs.length) {
             emit(req, "addon:booked", { booking: String(booking._id), turf: String(turf), bookingDate: day.toISOString(), startTime });
         }
@@ -351,6 +372,41 @@ router.post("/", async (req, res) => {
             message: "Booking created successfully",
             booking: populated,
             addons: addonDocs
+        });
+
+        // Mark one invited split member as paid. The booking stays Pending until every
+        // invited member has paid, then transitions atomically to Confirmed.
+        router.post("/:id/split-payments", async (req, res) => {
+            try {
+                const phone = String(req.body?.phone || "").trim();
+                if (!phone) return res.status(400).json({ message: "Member phone is required." });
+
+                const booking = await Booking.findById(req.params.id);
+                if (!booking) return res.status(404).json({ message: "Booking not found." });
+                if (booking.paymentPlan !== "split") {
+                    return res.status(400).json({ message: "This booking does not use split payment." });
+                }
+
+                const member = booking.splitMembers.find((entry) => entry.phone === phone);
+                if (!member) return res.status(404).json({ message: "Split member not found." });
+
+                member.paid = true;
+                member.paidAt = new Date();
+                const everyonePaid = booking.splitMembers.length > 0 && booking.splitMembers.every((entry) => entry.paid);
+                booking.splitPaymentStatus = everyonePaid ? "Completed" : "Pending";
+                booking.status = everyonePaid ? "Confirmed" : "Pending";
+                await booking.save();
+
+                emit(req, "booking:split-payment", {
+                    booking: String(booking._id),
+                    phone,
+                    status: booking.status,
+                    splitPaymentStatus: booking.splitPaymentStatus
+                });
+                res.json({ booking });
+            } catch (error) {
+                res.status(500).json({ message: error.message });
+            }
         });
 
     } catch (error) {

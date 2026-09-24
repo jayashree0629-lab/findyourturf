@@ -184,10 +184,12 @@ const REAL_TURFS = [
     {
         name: "Herkley Sports Centre",
         location: "Peelamedu",
+        address: "Peelamedu, Coimbatore",
         sports: ["Football", "Box Cricket"],
+        pricePerHour: 1000,
         roofType: "Closed",
         facilities: ["Roofed arena", "LED lighting"],
-        openingTime: null, closingTime: null,
+        openingTime: "06:00", closingTime: "23:00",
         weatherLocation: "Peelamedu, Coimbatore, Tamil Nadu, India"
     },
     {
@@ -280,6 +282,10 @@ async function seedTurfs() {
                 if (data.roofType && existing.roofType === "Not verified") set.roofType = data.roofType;
                 if ((!existing.facilities || existing.facilities.length === 0) && data.facilities && data.facilities.length) set.facilities = data.facilities;
                 if (data.weatherLocation) set.weatherLocation = data.weatherLocation;
+                if (data.name === "Herkley Sports Centre") {
+                    set.status = "Active";
+                    set.available = true;
+                }
                 if (Object.keys(set).length) {
                     await Turf.updateOne({ _id: existing._id }, { $set: set });
                     backfilled += 1;

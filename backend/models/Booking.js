@@ -8,6 +8,18 @@ const lineItemSchema = new mongoose.Schema(
     { _id: false }
 );
 
+const splitMemberSchema = new mongoose.Schema(
+    {
+        name: { type: String, default: "", trim: true },
+        phone: { type: String, required: true, trim: true },
+        gpayNumber: { type: String, default: "", trim: true },
+        sendMethod: { type: String, enum: ["sms", "gpay"], default: "sms" },
+        paid: { type: Boolean, default: false },
+        paidAt: { type: Date, default: null }
+    },
+    { _id: false }
+);
+
 const bookingSchema = new mongoose.Schema(
     {
         // Linked only when an existing User already matches the contact email /
@@ -80,6 +92,13 @@ const bookingSchema = new mongoose.Schema(
         contactEmail: { type: String, default: "", trim: true },
 
         paymentMethod: { type: String, default: "UPI", trim: true },
+        paymentPlan: { type: String, enum: ["full", "split"], default: "full" },
+        splitMembers: { type: [splitMemberSchema], default: [] },
+        splitPaymentStatus: {
+            type: String,
+            enum: ["NotApplicable", "Pending", "Completed"],
+            default: "NotApplicable"
+        },
 
         status: {
             type: String,

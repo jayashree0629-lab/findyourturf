@@ -5124,6 +5124,244 @@
 
 /* --- Checkout: single column (the app is a fixed phone frame) --- */
 .fyt-checkout-grid { grid-template-columns: 1fr !important; gap: 16px !important; }
+
+.fyt-payment-plan-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.fyt-payment-plan-toggle button {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border-default, #e5e7eb);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.fyt-payment-plan-toggle button.active {
+  border-color: var(--primary);
+  background: rgba(64, 88, 245, 0.07);
+  box-shadow: 0 0 0 2px rgba(64, 88, 245, 0.1);
+}
+
+.fyt-payment-plan-toggle button span {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.fyt-payment-plan-toggle button strong {
+  color: var(--primary);
+  font-size: 0.95rem;
+}
+
+.fyt-split-pay-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #dbe4ff;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #f8faff, #fff);
+}
+
+.fyt-split-pay-heading,
+.fyt-invite-header,
+.fyt-split-link-row,
+.fyt-team-chat-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fyt-split-pay-heading strong,
+.fyt-invite-header strong {
+  display: block;
+  font-size: 0.88rem;
+}
+
+.fyt-split-pay-heading span,
+.fyt-invite-header span {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+}
+
+.fyt-split-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 11px;
+  background: #e8edff;
+  color: var(--primary);
+}
+
+.fyt-demo-qr {
+  position: relative;
+  display: grid;
+  width: 150px;
+  height: 150px;
+  margin: 2px auto 0;
+  place-items: center;
+  overflow: hidden;
+  border: 8px solid #fff;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(28, 39, 85, 0.12);
+}
+
+.fyt-demo-qr-pattern {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(0deg, #111 0 5px, transparent 5px 10px),
+    repeating-linear-gradient(90deg, transparent 0 4px, #111 4px 9px, transparent 9px 14px);
+  opacity: 0.9;
+}
+
+.fyt-demo-qr::before,
+.fyt-demo-qr::after {
+  position: absolute;
+  width: 25px;
+  height: 25px;
+  border: 6px solid #111;
+  background: #fff;
+  content: "";
+  z-index: 1;
+}
+
+.fyt-demo-qr::before { top: 7px; left: 7px; }
+.fyt-demo-qr::after { right: 7px; bottom: 7px; }
+
+.fyt-demo-qr span {
+  z-index: 2;
+  padding: 3px 5px;
+  border-radius: 4px;
+  background: #fff;
+  color: #111;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.fyt-split-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.fyt-split-link-row {
+  justify-content: space-between;
+  padding: 8px 10px;
+  border: 1px dashed #c7d2fe;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.fyt-split-link-row span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fyt-split-link-row button,
+.fyt-add-member-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.fyt-invite-header { justify-content: space-between; margin-top: 4px; }
+.fyt-invite-list { display: grid; gap: 8px; }
+.fyt-invite-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fyt-invite-row .fyt-input { min-width: 0; }
+.fyt-share-options {
+  display: flex;
+  grid-column: 1 / -1;
+  gap: 6px;
+}
+.fyt-share-options button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 5px;
+  min-height: 34px;
+  border: 1px solid var(--border-default, #e5e7eb);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.fyt-share-options button.active {
+  border-color: var(--primary);
+  background: rgba(64, 88, 245, 0.08);
+  color: var(--primary);
+}
+
+.fyt-team-chat {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #e6eaf4;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.fyt-team-chat-title {
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.fyt-team-chat-messages {
+  display: grid;
+  gap: 6px;
+  max-height: 130px;
+  overflow: auto;
+}
+
+.fyt-team-chat-message {
+  display: grid;
+  gap: 2px;
+  padding: 7px 9px;
+  border-radius: 9px;
+  background: #f5f7fb;
+  font-size: 0.74rem;
+}
+
+.fyt-team-chat-message strong { color: var(--primary); font-size: 0.7rem; }
+.fyt-team-chat-message span { color: var(--text-secondary); line-height: 1.35; }
+.fyt-team-chat-input { display: flex; gap: 7px; }
+.fyt-team-chat-input .fyt-input { min-width: 0; flex: 1; }
+.fyt-team-chat-input button { display: grid; width: 38px; place-items: center; border: 0; border-radius: 9px; background: var(--primary); color: #fff; cursor: pointer; }
+
+@media (max-width: 520px) {
+  .fyt-payment-plan-toggle,
+  .fyt-invite-row { grid-template-columns: 1fr; }
+}
 .fyt-checkout-left { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .fyt-checkout-right { min-width: 0; }
 .fyt-inline-form { display: flex; flex-direction: column; gap: 12px; }
@@ -5183,3 +5421,98 @@
 
 /* space so the fixed sticky bar never hides page content */
 .fyt-has-sticky-cta .fyt-main-content { padding-bottom: 210px !important; }
+
+/* Checkout mobile polish: keep every control inside the phone frame. */
+@media (max-width: 600px) {
+  .fyt-page-banner { padding-bottom: 12px; }
+  .fyt-page-banner .fyt-td-nav-bar { margin-bottom: 10px !important; }
+  .fyt-pb-title { font-size: 25px; line-height: 1.08; }
+  .fyt-pb-desc { max-width: 30ch; font-size: 13px; line-height: 1.45; }
+  .fyt-search-box { padding: 11px 13px; }
+  .fyt-filter-group { align-items: flex-start; }
+  .fyt-chips-scroll { min-width: 0; overflow-x: auto; padding-bottom: 2px; }
+  .fyt-sport-chip { padding: 7px 11px; font-size: 12px; }
+  .fyt-date-chip { min-width: 62px; padding: 8px 7px; }
+  .fyt-subfilter-bar { align-items: stretch; }
+  .fyt-sort-dropdown-wrap,
+  .fyt-sort-select { width: 100%; }
+  .fyt-has-sticky-cta .fyt-main-content { padding-bottom: 150px !important; }
+  .fyt-has-sticky-cta .fyt-container { padding: 0 12px; }
+  .fyt-checkout-grid { gap: 12px !important; margin-top: 8px; }
+  .fyt-checkout-header-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 17px;
+    line-height: 1.15;
+    text-align: right;
+  }
+  .fyt-td-nav-bar { gap: 8px; align-items: center; }
+  .fyt-back-btn { flex: 0 0 auto; padding: 9px 12px; }
+  .fyt-checkout-venue-card,
+  .fyt-price-breakdown-card,
+  .fyt-customer-card { padding: 14px; }
+  .fyt-cvc-header { gap: 11px; padding-bottom: 13px; }
+  .fyt-cvc-img { width: 68px; height: 68px; }
+  .fyt-cvc-info { min-width: 0; }
+  .fyt-cvc-name { font-size: 16px; line-height: 1.2; overflow-wrap: anywhere; }
+  .fyt-cvc-loc { align-items: flex-start; font-size: 12px; line-height: 1.35; }
+  .fyt-cvc-details-grid { gap: 8px; margin-top: 13px; }
+  .fyt-cvc-val { display: block; font-size: 12px; line-height: 1.3; margin-top: 3px; }
+  .fyt-card { border-radius: 16px; }
+  .fyt-card-head { margin-bottom: 11px; }
+  .fyt-card-head-title { gap: 6px; }
+  .fyt-card-head-title h3 { font-size: 15px; }
+  .fyt-payment-plan-toggle { gap: 6px; }
+  .fyt-payment-plan-toggle button { padding: 10px; }
+  .fyt-split-pay-panel { padding: 12px; gap: 10px; border-radius: 14px; }
+  .fyt-demo-qr { width: 124px; height: 124px; border-width: 6px; }
+  .fyt-split-link-row { min-width: 0; }
+  .fyt-invite-row { grid-template-columns: 1fr 1fr; gap: 7px; }
+  .fyt-team-chat { padding: 9px; }
+  .fyt-team-chat-message { overflow-wrap: anywhere; }
+  .fyt-sticky-mobile-bottom {
+    bottom: 0;
+    width: 100%;
+    padding: 9px 12px;
+    gap: 8px;
+    border-radius: 0;
+  }
+  .fyt-smb-price strong { font-size: 17px; }
+  .fyt-smb-btn { padding: 11px 17px; font-size: 13px; }
+}
+
+.fyt-pending-badge {
+  background: #fff7ed !important;
+  color: #c2410c !important;
+}
+
+.fyt-split-status-card {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid #fed7aa;
+  border-radius: 14px;
+  background: #fffaf5;
+  text-align: left;
+}
+
+.fyt-split-status-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #c2410c;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.fyt-split-status-card p {
+  margin: 0;
+  color: #7c2d12;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.fyt-split-status-list { display: grid; gap: 7px; color: var(--text-secondary); font-size: 0.78rem; }
+.fyt-status-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: #f59e0b; }
+.fyt-status-dot.paid { background: #16a34a; }

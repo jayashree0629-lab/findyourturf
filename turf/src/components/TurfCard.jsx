@@ -17,7 +17,7 @@ const SPORT_EMOJI = {
 export default function TurfCard({ turf, index = 0, showSlots = true }) {
   const navigate = useNavigate();
   const [isLiked, setIsLiked] = useState(false);
-  const imageUrl = getTurfImage(turf, index);
+  const [imageUrl, setImageUrl] = useState(() => getTurfImage(turf, index));
 
   const sportList = Array.isArray(turf.sports) && turf.sports.length
     ? turf.sports
@@ -51,7 +51,13 @@ export default function TurfCard({ turf, index = 0, showSlots = true }) {
       aria-label={`${turf.name} — view details`}
     >
       <div className="fyt-tc-media">
-        <img src={imageUrl} alt={turf.name} className="fyt-tc-img" loading="lazy" />
+        <img
+          src={imageUrl}
+          alt={turf.name}
+          className="fyt-tc-img"
+          loading="lazy"
+          onError={() => setImageUrl("/cricket-turf.jpg")}
+        />
         <div className="fyt-tc-gradient-scrim" />
 
         <div className="fyt-tc-top-badges">

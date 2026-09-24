@@ -189,7 +189,7 @@ export default function TurfDetails() {
   const sportList = Array.isArray(turf.sports) && turf.sports.length ? turf.sports : turf.sportType ? [turf.sportType] : [];
   const hasPrice = turf.pricePerHour != null && turf.pricePerHour > 0;
   const hoursKnown = Boolean(turf.openingTime || turf.closingTime);
-  const isBookable = hasPrice && turf.available !== false && turf.status !== "Inactive" && availCount > 0;
+  const isBookable = hasPrice && availCount > 0;
 
   const handleBooking = () => {
     if (!selectedSlot) return;
