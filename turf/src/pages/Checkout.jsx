@@ -30,6 +30,8 @@ import {
   getAddons,
   getAddonAvailabilityBatch,
   getBookingQuote,
+  validateCoupon,
+  getMyCoupons,
 } from "../services/api";
 import { getProfile, saveProfile, addLocalBooking } from "../services/profile";
 import { getTurfImage } from "../utils/sportsImages";
@@ -241,10 +243,70 @@ export default function Checkout() {
     return lines;
   }, [addonsByType, pick, equipQty]);
 
-  const price = useMemo(
+  const basePrice = useMemo(
     () => (turf ? computePrice(turf, { players, useFloodlight, equipmentNames, addonLines }) : null),
     [turf, players, useFloodlight, equipmentNames, addonLines]
   );
+
+  // --- Coupon (rewards / student zone / promo codes) ---
+  const [couponInput, setCouponInput] = useState("");
+  const [coupon, setCoupon] = useState(null); // { code, label, discount }
+  const [couponBusy, setCouponBusy] = useState(false);
+  const [couponError, setCouponError] = useState("");
+  const [wallet, setWallet] = useState([]);
+
+  useEffect(() => {
+    const phone = getProfile()?.phone;
+    if (!phone) return;
+    getMyCoupons(phone).then(setWallet).catch(() => {});
+  }, []);
+
+  // Re-check an applied coupon whenever the subtotal moves (e.g. an add-on is
+  // added or removed) so a "minimum order" coupon can't linger once invalid.
+  const subtotal = basePrice?.total || 0;
+  useEffect(() => {
+    if (!coupon) return;
+    let active = true;
+    validateCoupon({ code: coupon.code, phone: getProfile()?.phone, subtotal })
+      .then((res) => active && setCoupon((c) => (c && c.discount !== res.discount ? { ...c, discount: res.discount } : c)))
+      .catch((err) => {
+        if (!active) return;
+        setCoupon(null);
+        setCouponError(err.message);
+      });
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subtotal]);
+
+  const applyCoupon = async (rawCode) => {
+    const code = String(rawCode ?? couponInput).trim();
+    if (!code) return;
+    const phone = getProfile()?.phone;
+    if (!phone) {
+      setCouponError("Add your mobile number above first — coupons are tied to it.");
+      return;
+    }
+    setCouponBusy(true);
+    setCouponError("");
+    try {
+      const res = await validateCoupon({ code, phone, subtotal });
+      setCoupon({ code: res.code, label: res.label, discount: res.discount });
+      setCouponInput("");
+    } catch (err) {
+      setCouponError(err.message);
+    } finally {
+      setCouponBusy(false);
+    }
+  };
+
+  const price = useMemo(() => {
+    if (!basePrice) return null;
+    const discount = coupon ? Math.min(coupon.discount, basePrice.total) : 0;
+    const total = basePrice.total - discount;
+    return { ...basePrice, discount, total, perPerson: Math.ceil(total / Math.max(1, players)) };
+  }, [basePrice, coupon, players]);
 
   if (!state || !turf) {
     return (
@@ -371,6 +433,7 @@ export default function Checkout() {
         paymentMethod,
         paymentPlan: isSplitEligible ? paymentPlan : "full",
         splitMembers: isSplitEligible && paymentPlan === "split" ? invitedMembers : [],
+        couponCode: coupon ? coupon.code : undefined,
         contact: { name: profile.name, phone: profile.phone, email: profile.email },
         status: isSplitEligible && paymentPlan === "split" ? "Pending" : "Confirmed",
       });
@@ -540,7 +603,7 @@ export default function Checkout() {
               </div>
 
               <div className="fyt-success-actions">
-                <button className="fyt-btn-primary" onClick={() => navigate("/profile")} style={{ width: "100%" }}>
+                <button className="fyt-btn-primary" onClick={() => navigate("/bookings")} style={{ width: "100%" }}>
                   View in My Bookings
                 </button>
                 <button
@@ -925,10 +988,63 @@ export default function Checkout() {
                   </div>
                 ))}
 
+                {price.discount > 0 && (
+                  <div className="fyt-price-line" style={{ color: "#047857" }}>
+                    <span>Coupon ({coupon.code})</span>
+                    <strong>−₹{price.discount}</strong>
+                  </div>
+                )}
+
                 <div className="fyt-price-line-total">
                   <span>Total</span>
                   <span className="fyt-price-total-val">₹{price.total}</span>
                 </div>
+
+                {!payMode && (
+                  <div className="fyt-x-coupon-box">
+                    {coupon ? (
+                      <div className="fyt-x-coupon-applied">
+                        <span>🎉 {coupon.code} applied — you save ₹{price.discount}</span>
+                        <button type="button" className="fyt-x-btn-ghost" onClick={() => setCoupon(null)}>Remove</button>
+                      </div>
+                    ) : (
+                      <>
+                        <form
+                          className="fyt-x-coupon-form"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            applyCoupon();
+                          }}
+                        >
+                          <input
+                            className="fyt-x-input"
+                            value={couponInput}
+                            onChange={(e) => {
+                              setCouponInput(e.target.value);
+                              setCouponError("");
+                            }}
+                            placeholder="Have a coupon code?"
+                            aria-label="Coupon code"
+                            maxLength={24}
+                          />
+                          <button className="fyt-btn-secondary" type="submit" disabled={couponBusy || !couponInput.trim()}>
+                            {couponBusy ? "…" : "Apply"}
+                          </button>
+                        </form>
+                        {wallet.length > 0 && (
+                          <div className="fyt-x-wallet">
+                            {wallet.map((c) => (
+                              <button key={c.code} type="button" className="fyt-x-chip" onClick={() => applyCoupon(c.code)}>
+                                {c.code}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {couponError && <div className="fyt-x-error">{couponError}</div>}
+                  </div>
+                )}
 
                 <div style={{ marginTop: 10, padding: "12px 14px", background: "#f5f3ff", borderRadius: 12, border: "1px solid #ddd6fe" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.9rem" }}>

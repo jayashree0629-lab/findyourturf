@@ -419,3 +419,127 @@ export async function getVisitors({ page = 1, limit = 200 } = {}) {
     limit: data.limit || limit,
   };
 }
+
+// ==========================================
+// BUSINESS INSIGHTS / BOOKINGS (extra)
+// ==========================================
+export async function getInsights() {
+  return request("/api/insights/summary", { headers: authHeaders() });
+}
+
+export async function confirmBooking(bookingId) {
+  return request(`/api/bookings/${bookingId}/confirm`, {
+    method: "PUT",
+    headers: authHeaders(),
+  });
+}
+
+// ==========================================
+// COUPONS
+// ==========================================
+export async function getCoupons() {
+  const data = await request("/api/coupons", { headers: authHeaders() });
+  return data.coupons || [];
+}
+
+export async function createCoupon(payload) {
+  const data = await request("/api/coupons", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  return data.coupon;
+}
+
+export async function setCouponActive(id, active) {
+  return request(`/api/coupons/${id}`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ active }),
+  });
+}
+
+export async function deleteCoupon(id) {
+  return request(`/api/coupons/${id}`, { method: "DELETE", headers: authHeaders() });
+}
+
+// ==========================================
+// STUDENT / CORPORATE ZONE ENQUIRIES
+// ==========================================
+export async function getZoneEnquiries() {
+  const data = await request("/api/zones/enquiries", { headers: authHeaders() });
+  return data.enquiries || [];
+}
+
+export async function updateZoneEnquiry(id, payload) {
+  const data = await request(`/api/zones/enquiries/${id}`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  return data.enquiry;
+}
+
+export async function approveZoneEnquiry(id, payload) {
+  const data = await request(`/api/zones/enquiries/${id}/approve`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  return data.enquiry;
+}
+
+export async function deleteZoneEnquiry(id) {
+  return request(`/api/zones/enquiries/${id}`, { method: "DELETE", headers: authHeaders() });
+}
+
+// ==========================================
+// COMMUNITY MODERATION
+// ==========================================
+export async function getAdminPosts() {
+  const data = await request("/api/community/admin-posts", { headers: authHeaders() });
+  return data.posts || [];
+}
+
+export async function createAnnouncement({ text, sport, pinned }) {
+  return request("/api/community/admin-posts", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ text, sport, pinned }),
+  });
+}
+
+export async function updateAdminPost(id, payload) {
+  return request(`/api/community/admin-posts/${id}`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteAdminPost(id) {
+  return request(`/api/community/admin-posts/${id}`, { method: "DELETE", headers: authHeaders() });
+}
+
+export async function getAdminPlayerRequests() {
+  const data = await request("/api/players/admin/all", { headers: authHeaders() });
+  return data.requests || [];
+}
+
+export async function setPlayerRequestStatus(id, status) {
+  return request(`/api/players/admin/${id}/status`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function getAdminChatMessages(room) {
+  const q = room ? `?room=${encodeURIComponent(room)}` : "";
+  const data = await request(`/api/chat/admin-messages${q}`, { headers: authHeaders() });
+  return data.messages || [];
+}
+
+export async function deleteChatMessage(id) {
+  return request(`/api/chat/admin-messages/${id}`, { method: "DELETE", headers: authHeaders() });
+}

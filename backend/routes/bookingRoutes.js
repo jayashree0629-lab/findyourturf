@@ -5,10 +5,43 @@ const Turf = require("../models/Turf");
 const User = require("../models/User");
 const AddonBooking = require("../models/AddonBooking");
 const protect = require("../middleware/authMiddleware");
-const { computeBookingPrice } = require("../utils/turfPricing");
+const { computeBookingPrice, slotStartMs } = require("../utils/turfPricing");
 const { resolveAddons } = require("../utils/addonPricing");
+const { normalisePhone } = require("../utils/phone");
+const Coupon = require("../models/Coupon");
+const { validateCoupon, consumeCoupon, releaseCoupon } = require("../utils/coupons");
 
 const router = express.Router();
+
+// Players can cancel themselves up to this many hours before the slot starts.
+const SELF_CANCEL_WINDOW_HOURS = 2;
+
+// Shared by the player and admin cancel paths: frees add-ons, gives back a
+// used coupon, tells connected clients the slot is open again.
+async function applyCancellation(req, booking) {
+    booking.status = "Cancelled";
+    const saved = await booking.save();
+
+    await AddonBooking.updateMany(
+        { booking: booking._id, status: { $ne: "Cancelled" } },
+        { $set: { status: "Cancelled" } }
+    );
+
+    if (booking.couponCode) {
+        const coupon = await Coupon.findOne({ code: booking.couponCode });
+        const phone = normalisePhone(booking.contactPhone) || booking.contactPhone;
+        if (coupon) await releaseCoupon(coupon, phone).catch(() => {});
+    }
+
+    emit(req, "booking:cancelled", {
+        _id: booking._id,
+        turf: String(booking.turf),
+        bookingDate: booking.bookingDate.toISOString(),
+        startTime: booking.startTime
+    });
+
+    return saved;
+}
 
 // Link an existing User if one already matches the contact details. The player
 // app has no login, so we never create accounts here — the booking's contact
@@ -170,7 +203,11 @@ router.get("/mine", async (req, res) => {
         const { email, phone } = req.query;
         const or = [];
         if (email) or.push({ contactEmail: String(email).trim().toLowerCase() });
-        if (phone) or.push({ contactPhone: String(phone).trim() });
+        if (phone) {
+            const rawPhone = String(phone).trim();
+            const normalised = normalisePhone(rawPhone);
+            or.push({ contactPhone: { $in: [...new Set([rawPhone, normalised].filter(Boolean))] } });
+        }
 
         if (or.length === 0) {
             return res.json({ bookings: [] });
@@ -187,8 +224,22 @@ router.get("/mine", async (req, res) => {
             (byBooking[String(a.booking)] = byBooking[String(a.booking)] || []).push(a);
         });
 
+        const now = Date.now();
         res.json({
-            bookings: bookings.map((b) => ({ ...b.toObject(), addons: byBooking[String(b._id)] || [] }))
+            cancelWindowHours: SELF_CANCEL_WINDOW_HOURS,
+            bookings: bookings.map((b) => {
+                const start = slotStartMs(b);
+                return {
+                    ...b.toObject(),
+                    addons: byBooking[String(b._id)] || [],
+                    startsAt: start != null ? new Date(start).toISOString() : null,
+                    isPast: start != null ? start < now : false,
+                    canCancel:
+                        b.status !== "Cancelled" &&
+                        start != null &&
+                        (start - now) / 3600000 >= SELF_CANCEL_WINDOW_HOURS
+                };
+            })
         });
 
     } catch (error) {
@@ -217,6 +268,7 @@ router.post("/", async (req, res) => {
             paymentMethod,
             paymentPlan = "full",
             splitMembers = [],
+            couponCode,
             status
         } = req.body;
 
@@ -278,7 +330,7 @@ router.post("/", async (req, res) => {
         });
 
         const contactName = String(contact.name || "").trim();
-        const contactPhone = String(contact.phone || "").trim();
+        const contactPhone = normalisePhone(contact.phone) || String(contact.phone || "").trim();
         const contactEmail = String(contact.email || "").trim().toLowerCase();
 
         const normalizedSplitMembers = paymentPlan === "split"
@@ -299,21 +351,49 @@ router.post("/", async (req, res) => {
             });
         }
 
-        const booking = await Booking.create({
+        // --- Coupon: validated and atomically claimed BEFORE the booking is
+        // written, then given back if anything below fails.
+        let discountAmount = 0;
+        let appliedCoupon = null;
+        const cleanCouponCode = String(couponCode || "").trim();
+        if (cleanCouponCode) {
+            try {
+                const { coupon, discount } = await validateCoupon({
+                    code: cleanCouponCode,
+                    phone: contactPhone,
+                    subtotal: price.totalAmount
+                });
+                if (!(await consumeCoupon(coupon, contactPhone))) {
+                    return res.status(409).json({ message: "This coupon was just used. Please remove it and try again." });
+                }
+                appliedCoupon = coupon;
+                discountAmount = discount;
+            } catch (e) {
+                return res.status(e.status || 400).json({ message: e.message });
+            }
+        }
+        const finalTotal = price.totalAmount - discountAmount;
+        const finalPerPerson = Math.ceil(finalTotal / price.players);
+
+        let booking;
+        try {
+        booking = await Booking.create({
             user: linkedUserId,
             turf,
             bookingDate: day,
             startTime,
             endTime,
             players: price.players,
-            perPersonAmount: price.perPersonAmount,
+            perPersonAmount: finalPerPerson,
             baseAmount: price.baseAmount,
             floodlightApplied: price.floodlightApplied,
             floodlightAmount: price.floodlightAmount,
             equipmentSelected: price.equipmentSelected,
             equipmentAmount: price.equipmentAmount,
             addonsAmount: price.addonsAmount,
-            totalAmount: price.totalAmount,
+            couponCode: appliedCoupon ? appliedCoupon.code : "",
+            discountAmount,
+            totalAmount: finalTotal,
             contactName,
             contactPhone,
             contactEmail,
@@ -323,6 +403,10 @@ router.post("/", async (req, res) => {
             splitPaymentStatus: isSplit ? "Pending" : "NotApplicable",
             status: isSplit || status === "Pending" ? "Pending" : "Confirmed"
         });
+        } catch (createErr) {
+            if (appliedCoupon) await releaseCoupon(appliedCoupon, contactPhone).catch(() => {});
+            throw createErr;
+        }
 
         // --- Persist each add-on. Roll the whole booking back on any failure. ---
         let addonDocs = [];
@@ -352,6 +436,7 @@ router.post("/", async (req, res) => {
         } catch (e) {
             await AddonBooking.deleteMany({ booking: booking._id });
             await Booking.deleteOne({ _id: booking._id });
+            if (appliedCoupon) await releaseCoupon(appliedCoupon, contactPhone).catch(() => {});
             return res.status(500).json({ message: "Could not attach add-ons: " + e.message });
         }
 
@@ -476,22 +561,9 @@ router.put("/:id/cancel", protect, async (req, res) => {
             });
         }
 
-        booking.status = "Cancelled";
-
-        const updatedBooking = await booking.save();
-
-        // Free up any attached add-ons (photographer/coach slots, equipment stock).
-        await AddonBooking.updateMany(
-            { booking: booking._id, status: { $ne: "Cancelled" } },
-            { $set: { status: "Cancelled" } }
-        );
-
-        emit(req, "booking:cancelled", {
-            _id: booking._id,
-            turf: String(booking.turf),
-            bookingDate: booking.bookingDate.toISOString(),
-            startTime: booking.startTime
-        });
+        // Frees add-ons (photographer/coach slots, equipment stock) and gives
+        // back any coupon that was used.
+        const updatedBooking = await applyCancellation(req, booking);
 
         res.json({
             message: "Booking cancelled successfully",
@@ -502,6 +574,72 @@ router.put("/:id/cancel", protect, async (req, res) => {
         res.status(500).json({
             message: error.message
         });
+    }
+});
+
+
+// ==========================================
+// CONFIRM A PENDING BOOKING - ADMIN ONLY
+// ==========================================
+router.put("/:id/confirm", protect, async (req, res) => {
+    try {
+        const booking = await Booking.findById(req.params.id);
+        if (!booking) {
+            return res.status(404).json({ message: "Booking not found" });
+        }
+        if (booking.status === "Cancelled") {
+            return res.status(400).json({ message: "A cancelled booking can't be confirmed." });
+        }
+        booking.status = "Confirmed";
+        await booking.save();
+        res.json({ message: "Booking confirmed", booking });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+
+// ==========================================
+// CANCEL MY BOOKING - PUBLIC (verified by the booking's phone number)
+// Allowed until SELF_CANCEL_WINDOW_HOURS before the slot starts.
+// ==========================================
+router.put("/:id/cancel-mine", async (req, res) => {
+    try {
+        const phone = normalisePhone(req.body && req.body.phone);
+        if (!phone) {
+            return res.status(400).json({ message: "Enter the mobile number used for this booking." });
+        }
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(404).json({ message: "Booking not found" });
+        }
+
+        const booking = await Booking.findById(req.params.id);
+        // Same message for "not found" and "not yours" so ids can't be probed.
+        if (!booking || (normalisePhone(booking.contactPhone) || booking.contactPhone) !== phone) {
+            return res.status(404).json({ message: "Booking not found for this mobile number." });
+        }
+        if (booking.status === "Cancelled") {
+            return res.status(400).json({ message: "This booking is already cancelled." });
+        }
+
+        const start = slotStartMs(booking);
+        if (start != null) {
+            const hoursLeft = (start - Date.now()) / 3600000;
+            if (hoursLeft < 0) {
+                return res.status(400).json({ message: "This booking is already in the past." });
+            }
+            if (hoursLeft < SELF_CANCEL_WINDOW_HOURS) {
+                return res.status(400).json({
+                    message: `Bookings can only be cancelled online up to ${SELF_CANCEL_WINDOW_HOURS} hours before the slot. Please call the venue.`
+                });
+            }
+        }
+
+        const saved = await applyCancellation(req, booking);
+        res.json({ message: "Booking cancelled. The slot is open for others again.", booking: saved });
+
+    } catch (error) {
+        res.status(500).json({ message: error.message });
     }
 });
 

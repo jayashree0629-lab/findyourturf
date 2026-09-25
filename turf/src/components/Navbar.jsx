@@ -2,14 +2,12 @@ import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Bell, User, MapPin, Calendar, Trophy, PlayCircle } from "lucide-react";
 import { getNotificationsSeenAt, getProfile } from "../services/profile";
-import LockedFeatureModal from "./LockedFeatureModal";
 
 export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const [showBadge, setShowBadge] = useState(false);
   const [profile, setProfile] = useState(() => getProfile());
-  const [lockedFeature, setLockedFeature] = useState("");
 
   useEffect(() => {
     setShowBadge(!getNotificationsSeenAt());
@@ -23,13 +21,15 @@ export default function Navbar() {
     { path: "/turfs", label: "Book Turf", icon: Calendar },
     { path: "/tournaments", label: "Tournaments", icon: Trophy, altPath: "/events" },
     { path: "/live", label: "Live Scores", icon: PlayCircle },
+    { path: "/community", label: "Community", altPaths: ["/players", "/chat", "/teams"] },
   ];
 
   const isCurrent = (link) => {
     if (link.path === "/") return location.pathname === "/";
     return (
       location.pathname.startsWith(link.path) ||
-      (link.altPath && location.pathname.startsWith(link.altPath))
+      (link.altPath && location.pathname.startsWith(link.altPath)) ||
+      (link.altPaths || []).some((p) => location.pathname.startsWith(p))
     );
   };
 
@@ -55,7 +55,7 @@ export default function Navbar() {
               <button
                 key={link.path}
                 className={`fyt-nav-link ${active ? "active" : ""}`}
-                onClick={() => link.locked ? setLockedFeature(link.label) : navigate(link.path)}
+                onClick={() => navigate(link.path)}
               >
                 {link.label}
                 {active && <span className="fyt-nav-active-pill" />}
@@ -99,9 +99,6 @@ export default function Navbar() {
           </button>
         </div>
       </div>
-      {lockedFeature && (
-        <LockedFeatureModal feature={lockedFeature} onClose={() => setLockedFeature("")} />
-      )}
     </header>
   );
 }

@@ -20,14 +20,20 @@ import {
   ShieldCheck,
   ExternalLink,
   Flame,
-  Lock,
+  Ticket,
+  Gift,
+  MessageCircle,
+  Newspaper,
+  Shuffle,
+  GraduationCap,
+  Building2,
 } from "lucide-react";
 
 import "./App.css";
 import { getEvent, getEvents, getTournament } from "./services/api";
 import { socket } from "./services/socket";
 import { getEventImage } from "./utils/sportsImages";
-import { isVisitorRegistered } from "./services/profile";
+import { isVisitorRegistered, getIdentity } from "./services/profile";
 
 // Components
 import Navbar from "./components/Navbar";
@@ -35,7 +41,6 @@ import BottomNav from "./components/BottomNav";
 import SportCategoryCards from "./components/SportCategoryCards";
 import { EventCardSkeleton } from "./components/SkeletonLoader";
 import EmptyState from "./components/EmptyState";
-import LockedFeatureModal from "./components/LockedFeatureModal";
 
 // Pages
 import UserLiveMatches from "./pages/UserLiveMatches";
@@ -48,6 +53,13 @@ import TurfDetails from "./pages/TurfDetails";
 import Checkout from "./pages/Checkout";
 import AddonsCatalog from "./pages/AddonsCatalog";
 import QuickRegister from "./pages/QuickRegister";
+import MyBookings from "./pages/MyBookings";
+import FindPlayers from "./pages/FindPlayers";
+import TeamChat from "./pages/TeamChat";
+import Community from "./pages/Community";
+import AutoTeams from "./pages/AutoTeams";
+import Rewards from "./pages/Rewards";
+import ZonePage from "./pages/ZonePage";
 
 // Banners
 import banner1 from "./assets/banners/promo_tournaments_1788516995082.jpg";
@@ -117,6 +129,13 @@ function useEvents() {
   };
 }
 
+function greetingFor(name) {
+  const h = new Date().getHours();
+  const part = h < 5 ? "Good night" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+  const first = (name || "").trim().split(/\s+/)[0];
+  return first ? `${part}, ${first}.` : `${part}.`;
+}
+
 function HeroSection() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
@@ -134,7 +153,7 @@ function HeroSection() {
         <div className="fyt-hero-grid">
           {/* Left Content */}
           <div className="fyt-hero-text">
-            <p className="fyt-greeting">Good evening.</p>
+            <p className="fyt-greeting">{greetingFor(getIdentity().name)}</p>
             <div className="fyt-hero-pill">
               <Flame size={14} className="fyt-flame-icon" />
               <span>Coimbatore&apos;s #1 Sports Turf Network</span>
@@ -225,17 +244,16 @@ function HeroSection() {
 
 function QuickActions() {
   const navigate = useNavigate();
-  const [lockedFeature, setLockedFeature] = useState("");
   const quickAccess = [
-    { label: "Tournaments", Icon: Trophy, active: true, onClick: () => navigate("/tournaments") },
-    { label: "Live Scores", Icon: PlayCircle, active: true, onClick: () => navigate("/live") },
-    { label: "Book Turf", Icon: CalendarDays, active: true, onClick: () => navigate("/turfs") },
-    { label: "Add-ons", Icon: Sparkles, active: true, onClick: () => navigate("/addons") },
-    { label: "Find Players", Icon: Users },
-    { label: "Auto Teams", Icon: Sparkles },
-    { label: "Team Chat", Icon: PlayCircle },
-    { label: "Student", Icon: Sparkles },
-    { label: "Corporate", Icon: Users },
+    { label: "Tournaments", Icon: Trophy, to: "/tournaments" },
+    { label: "Live Scores", Icon: PlayCircle, to: "/live" },
+    { label: "Book Turf", Icon: CalendarDays, to: "/turfs" },
+    { label: "Add-ons", Icon: Sparkles, to: "/addons" },
+    { label: "Find Players", Icon: Users, to: "/players" },
+    { label: "Auto Teams", Icon: Shuffle, to: "/teams" },
+    { label: "Team Chat", Icon: MessageCircle, to: "/chat" },
+    { label: "Student", Icon: GraduationCap, to: "/zones/student" },
+    { label: "Corporate", Icon: Building2, to: "/zones/corporate" },
   ];
 
   return (
@@ -248,22 +266,18 @@ function QuickActions() {
           </div>
         </div>
         <div className="fyt-quick-access-grid" aria-label="Quick access">
-          {quickAccess.map(({ label, Icon, active, onClick }) => (
+          {quickAccess.map(({ label, Icon, to }) => (
             <button
               key={label}
-              className={`fyt-quick-access-card ${active ? "is-active" : "is-locked"}`}
-              onClick={onClick || (() => setLockedFeature(label))}
+              className="fyt-quick-access-card is-active"
+              onClick={() => navigate(to)}
             >
               <span className="fyt-quick-access-icon"><Icon size={20} /></span>
               <span>{label}</span>
-              {!active && <small><Lock size={10} /> Upcoming</small>}
             </button>
           ))}
         </div>
       </div>
-      {lockedFeature && (
-        <LockedFeatureModal feature={lockedFeature} onClose={() => setLockedFeature("")} />
-      )}
     </section>
   );
 }
@@ -406,45 +420,37 @@ function EventCard({ event, index = 0 }) {
   );
 }
 
-function LockedSections() {
-  const [lockedFeature, setLockedFeature] = useState("");
+function MoreSection() {
+  const navigate = useNavigate();
   const sections = [
-    { title: "My Bookings", detail: "Booking feature coming soon", icon: CalendarDays },
-    { title: "Your Zone", detail: "Student & Corporate zones coming soon", icon: Users },
-    { title: "Rewards", detail: "Earn rewards and unlock perks soon", icon: Trophy },
-    { title: "Community", detail: "Connect with players soon", icon: Users },
+    { title: "My Bookings", detail: "View, share or cancel your games", icon: Ticket, to: "/bookings" },
+    { title: "Rewards", detail: "Earn points and unlock coupons", icon: Gift, to: "/rewards" },
+    { title: "Community", detail: "Posts, tips and match results", icon: Newspaper, to: "/community" },
+    { title: "Your Zone", detail: "Student & Corporate offers", icon: GraduationCap, to: "/zones/student" },
   ];
 
   return (
-    <section className="fyt-section fyt-locked-sections">
+    <section className="fyt-section">
       <div className="fyt-container">
         <div className="fyt-section-header-row">
           <div>
             <span className="fyt-section-kicker">MORE FROM FIND YOUR TURF</span>
-            <h2 className="fyt-section-title">Coming Soon</h2>
+            <h2 className="fyt-section-title">Your game hub</h2>
           </div>
         </div>
-        <div className="fyt-locked-sections-grid">
-          {sections.map(({ title, detail, icon: Icon }) => (
-            <button
-              key={title}
-              className="fyt-locked-section-card"
-              onClick={() => setLockedFeature(title)}
-            >
-              <span className="fyt-locked-section-icon"><Icon size={20} /></span>
-              <span className="fyt-locked-section-copy">
+        <div className="fyt-x-more-grid">
+          {sections.map(({ title, detail, icon: Icon, to }) => (
+            <button key={title} className="fyt-x-more-card" onClick={() => navigate(to)}>
+              <span className="fyt-x-more-icon"><Icon size={22} /></span>
+              <span style={{ flex: 1 }}>
                 <strong>{title}</strong>
-                <small><Lock size={11} /> Coming Soon</small>
                 <em>{detail}</em>
               </span>
-              <ChevronRight size={16} />
+              <ChevronRight size={16} color="var(--text-muted)" />
             </button>
           ))}
         </div>
       </div>
-      {lockedFeature && (
-        <LockedFeatureModal feature={lockedFeature} onClose={() => setLockedFeature("")} />
-      )}
     </section>
   );
 }
@@ -523,8 +529,8 @@ function Home() {
           </div>
         </section>
 
-        {/* 6. Locked product areas */}
-        <LockedSections />
+        {/* 6. Game hub: bookings, rewards, community, zones */}
+        <MoreSection />
       </main>
 
       <BottomNav />
@@ -883,6 +889,27 @@ function formatDate(date) {
   });
 }
 
+function NotFound() {
+  const navigate = useNavigate();
+  return (
+    <div className="fyt-app-shell">
+      <Navbar />
+      <main className="fyt-main-content" style={{ paddingBottom: 110 }}>
+        <div className="fyt-container" style={{ maxWidth: 560, padding: "40px 16px" }}>
+          <EmptyState
+            type="error"
+            title="We couldn't find that page"
+            message="The link may be old or mistyped. Let's get you back to the game."
+            actionLabel="Go to home"
+            onAction={() => navigate("/")}
+          />
+        </div>
+      </main>
+      <BottomNav />
+    </div>
+  );
+}
+
 function App() {
   // Quick visitor registration gate — shown once per browser before any
   // route renders. Existing routes below are completely unchanged.
@@ -908,6 +935,15 @@ function App() {
       <Route path="/live/:id" element={<PublicMatchScorecard />} />
       <Route path="/notifications" element={<Notifications />} />
       <Route path="/profile" element={<Profile />} />
+      <Route path="/bookings" element={<MyBookings />} />
+      <Route path="/players" element={<FindPlayers />} />
+      <Route path="/chat" element={<TeamChat />} />
+      <Route path="/chat/:room" element={<TeamChat />} />
+      <Route path="/community" element={<Community />} />
+      <Route path="/teams" element={<AutoTeams />} />
+      <Route path="/rewards" element={<Rewards />} />
+      <Route path="/zones/:zone" element={<ZonePage />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }

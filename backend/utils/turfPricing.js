@@ -21,6 +21,18 @@ function parseSlotStart(label) {
     return toMinutes(s);
 }
 
+const IST_OFFSET_MINUTES = 330;
+
+// Absolute start time of a booking. Bookings store the calendar day as UTC
+// midnight and the slot as a label like "6:00 PM" (local Coimbatore time).
+function slotStartMs(booking) {
+    const minutes = parseSlotStart(booking.startTime);
+    if (minutes == null) return null;
+    const d = new Date(booking.bookingDate);
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) +
+        (minutes - IST_OFFSET_MINUTES) * 60000;
+}
+
 /**
  * @param {object} turf   Turf document.
  * @param {object} opts
@@ -75,4 +87,4 @@ function computeBookingPrice(turf, opts = {}) {
     };
 }
 
-module.exports = { computeBookingPrice, parseSlotStart, toMinutes };
+module.exports = { computeBookingPrice, parseSlotStart, toMinutes, slotStartMs };

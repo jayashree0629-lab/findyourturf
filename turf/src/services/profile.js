@@ -76,8 +76,19 @@ export function isVisitorRegistered() {
   return Boolean(v && v.visitorRegistered && v.visitorId);
 }
 
+// Who is using this device, for community features (chat, players, rewards…).
+// Prefers the checkout profile, falls back to the quick-registration record.
+// `phone` is empty for visitors registered before the phone was remembered.
+export function getIdentity() {
+  const profile = getProfile();
+  const visitor = getVisitor();
+  const name = (profile?.name || visitor?.name || "").trim();
+  const phone = String(profile?.phone || visitor?.phone || "").replace(/\D/g, "").slice(-10);
+  return { name, phone, ready: Boolean(name && /^[6-9]\d{9}$/.test(phone)) };
+}
+
 export function saveVisitor({ visitorId, name, phone }) {
-  const record = { visitorRegistered: true, visitorId, name };
+  const record = { visitorRegistered: true, visitorId, name, phone };
   try {
     localStorage.setItem(VISITOR_KEY, JSON.stringify(record));
   } catch {

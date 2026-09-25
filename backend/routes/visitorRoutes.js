@@ -4,20 +4,7 @@ const protect = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-const INDIAN_MOBILE = /^[6-9]\d{9}$/;
-
-// Accepts "9876543210", "+91 98765 43210", "091-9876543210", etc. and returns
-// the canonical 10-digit form, or null if it isn't a valid Indian mobile.
-function normalisePhone(raw) {
-    const digits = String(raw || "").replace(/\D/g, "");
-    const local =
-        digits.length === 12 && digits.startsWith("91")
-            ? digits.slice(2)
-            : digits.length === 11 && digits.startsWith("0")
-            ? digits.slice(1)
-            : digits;
-    return INDIAN_MOBILE.test(local) ? local : null;
-}
+const { normalisePhone } = require("../utils/phone");
 
 function toPublicVisitor(doc) {
     return {

@@ -142,6 +142,25 @@ app.use("/api/addons", addonRoutes);
 const visitorRoutes = require("./routes/visitorRoutes");
 app.use("/api/visitors", visitorRoutes);
 
+const playerRoutes = require("./routes/playerRoutes");
+app.use("/api/players", playerRoutes);
+
+const chatRoutes = require("./routes/chatRoutes");
+app.use("/api/chat", chatRoutes);
+
+const communityRoutes = require("./routes/communityRoutes");
+app.use("/api/community", communityRoutes);
+
+const zoneRoutes = require("./routes/zoneRoutes");
+app.use("/api/zones", zoneRoutes);
+
+const { couponRouter, rewardsRouter } = require("./routes/couponRoutes");
+app.use("/api/coupons", couponRouter);
+app.use("/api/rewards", rewardsRouter);
+
+const insightsRoutes = require("./routes/insightsRoutes");
+app.use("/api/insights", insightsRoutes);
+
 const tournamentRoutes = require("./routes/tournamentRoutes");
 app.use("/api/tournaments", tournamentRoutes);
 
@@ -180,6 +199,18 @@ app.use((err, req, res, next) => {
 
 io.on("connection", (socket) => {
   console.log("✅ Client connected:", socket.id);
+
+  // Chat rooms: a client subscribes to a room to receive its live messages.
+  // Room names are validated; access to a game's private room is enforced when
+  // messages are read or posted over HTTP (see routes/chatRoutes.js).
+  socket.on("chat:join", (room) => {
+    if (typeof room === "string" && /^[a-z0-9-]{1,40}$/.test(room)) {
+      socket.join(`chat:${room}`);
+    }
+  });
+  socket.on("chat:leave", (room) => {
+    if (typeof room === "string") socket.leave(`chat:${room}`);
+  });
 
   socket.on("disconnect", () => {
     console.log("❌ Client disconnected:", socket.id);

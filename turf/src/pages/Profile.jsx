@@ -13,6 +13,12 @@ import {
   ArrowRight,
   ShieldCheck,
   CheckCircle2,
+  Ticket,
+  Gift,
+  Users,
+  Newspaper,
+  GraduationCap,
+  Building2,
 } from "lucide-react";
 import {
   getProfile,
@@ -195,13 +201,33 @@ export default function Profile() {
             </div>
           )}
 
+          {/* Quick links to everything else the app does */}
+          <section style={{ marginTop: 24 }}>
+            <div className="fyt-x-links">
+              {[
+                { to: "/bookings", label: "My Bookings", hint: "Manage or cancel", Icon: Ticket },
+                { to: "/rewards", label: "Rewards", hint: "Points & coupons", Icon: Gift },
+                { to: "/players", label: "Find Players", hint: "Join or host a game", Icon: Users },
+                { to: "/community", label: "Community", hint: "Posts & chat", Icon: Newspaper },
+                { to: "/zones/student", label: "Student Zone", hint: "Student discounts", Icon: GraduationCap },
+                { to: "/zones/corporate", label: "Corporate Zone", hint: "Team events", Icon: Building2 },
+              ].map(({ to, label, hint, Icon }) => (
+                <button key={to} className="fyt-x-link-tile" onClick={() => navigate(to)}>
+                  <Icon size={20} />
+                  <span>{label}</span>
+                  <small>{hint}</small>
+                </button>
+              ))}
+            </div>
+          </section>
+
           {/* Bookings History Section */}
           <section className="fyt-my-bookings-section" style={{ marginTop: 28 }}>
             <div className="fyt-section-header-row">
-              <h2 className="fyt-section-title">My Turf Bookings</h2>
-              <span className="fyt-bookings-count">
-                {bookings.length} {bookings.length === 1 ? "Booking" : "Bookings"}
-              </span>
+              <h2 className="fyt-section-title">Recent Bookings</h2>
+              <button className="fyt-x-btn-ghost" onClick={() => navigate("/bookings")}>
+                Manage all bookings →
+              </button>
             </div>
 
             {bookings.length === 0 ? (

@@ -10,6 +10,11 @@ import LiveMatches from "./LiveMatches";
 import TurfManagement from "./TurfManagement";
 import AddonsManagement from "./AddonsManagement";
 import VisitorsManagement from "./VisitorsManagement";
+import BookingsManagement from "./BookingsManagement";
+import CouponsManagement from "./CouponsManagement";
+import EnquiriesManagement from "./EnquiriesManagement";
+import CommunityManagement from "./CommunityManagement";
+import BusinessInsights from "../components/common/BusinessInsights";
 import {
   IconCalendar,
   IconTrophy,
@@ -52,6 +57,7 @@ import {
   getBookings,
   cancelBooking,
   getUsers,
+  getInsights,
 } from "../services/api";
 import { socket } from "../services/socket";
 import { getAdmin } from "../services/auth";
@@ -94,6 +100,8 @@ export default function AdminDashboard() {
   // Data states
   const [events, setEvents] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [insights, setInsights] = useState(null);
+  const [insightsError, setInsightsError] = useState("");
   const [users, setUsers] = useState([]);
   const [dashboardStats, setDashboardStats] = useState(null);
 
@@ -169,13 +177,21 @@ export default function AdminDashboard() {
       setLoading(true);
       setError("");
 
-      const [eventsData, statsData, bookingsData, usersData] =
+      const [eventsData, statsData, bookingsData, usersData, insightsData] =
         await Promise.allSettled([
           getEvents(),
           getDashboardStats(),
           getBookings(),
           getUsers(),
+          getInsights(),
         ]);
+
+      if (insightsData.status === "fulfilled") {
+        setInsights(insightsData.value);
+        setInsightsError("");
+      } else {
+        setInsightsError(insightsData.reason?.message || "Could not load.");
+      }
 
       if (eventsData.status === "fulfilled") {
         const evs = Array.isArray(eventsData.value) ? eventsData.value : [];
@@ -590,7 +606,8 @@ export default function AdminDashboard() {
     teams: totalTeamsCount,
     matches: totalMatchesCount,
     liveMatches: liveMatches.length,
-    bookings: totalBookingsCount,
+    bookings: bookings.filter((b) => b.status === "Pending").length,
+    enquiries: insights?.community?.openEnquiries || 0,
     users: users.length,
   };
 
@@ -611,6 +628,14 @@ export default function AdminDashboard() {
           ? "Add-ons Management"
           : activeTab === "visitors"
           ? "Visitors"
+          : activeTab === "bookings"
+          ? "Bookings"
+          : activeTab === "coupons"
+          ? "Coupons"
+          : activeTab === "enquiries"
+          ? "Zone Requests"
+          : activeTab === "community"
+          ? "Community"
           : "System Settings"
       }
       breadcrumb={`Overview / ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}`}
@@ -649,6 +674,8 @@ export default function AdminDashboard() {
           ------------------------------------------------------------------- */}
       {activeTab === "overview" && (
         <>
+          <BusinessInsights data={insights} error={insightsError} onNavigate={setActiveTab} />
+
           {/* 4 Stat Cards */}
           <div className="stats-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
             <StatCard
@@ -744,6 +771,11 @@ export default function AdminDashboard() {
       {activeTab === "visitors" && (
         <VisitorsManagement />
       )}
+
+      {activeTab === "bookings" && <BookingsManagement />}
+      {activeTab === "coupons" && <CouponsManagement />}
+      {activeTab === "enquiries" && <EnquiriesManagement />}
+      {activeTab === "community" && <CommunityManagement />}
 
       {/* -------------------------------------------------------------------
           TAB 3: EVENTS MANAGEMENT

@@ -210,3 +210,143 @@ export async function registerVisitor({ name, phone }) {
   });
   return data.visitor;
 }
+
+// --- My bookings (player self-service) ---
+export async function getMyBookingsDetailed({ phone, email } = {}) {
+  const params = new URLSearchParams();
+  if (email) params.set("email", email);
+  if (phone) params.set("phone", phone);
+  if (![...params].length) return { bookings: [], cancelWindowHours: 2 };
+  const data = await request(`/api/bookings/mine?${params.toString()}`);
+  return { bookings: data.bookings || [], cancelWindowHours: data.cancelWindowHours || 2 };
+}
+
+export async function cancelMyBooking(bookingId, phone) {
+  return request(`/api/bookings/${bookingId}/cancel-mine`, {
+    method: "PUT",
+    body: JSON.stringify({ phone }),
+  });
+}
+
+// --- Coupons & rewards ---
+export async function validateCoupon({ code, phone, subtotal }) {
+  return request("/api/coupons/validate", {
+    method: "POST",
+    body: JSON.stringify({ code, phone, subtotal }),
+  });
+}
+
+export async function getMyCoupons(phone) {
+  const data = await request(`/api/coupons/mine?phone=${encodeURIComponent(phone)}`);
+  return data.coupons || [];
+}
+
+export async function getRewardsSummary(phone) {
+  return request(`/api/rewards/summary?phone=${encodeURIComponent(phone)}`);
+}
+
+export async function redeemReward({ phone, rewardId }) {
+  return request("/api/rewards/redeem", {
+    method: "POST",
+    body: JSON.stringify({ phone, rewardId }),
+  });
+}
+
+// --- Find players ---
+export async function getPlayerRequests({ sport, area, phone, mine } = {}) {
+  const p = new URLSearchParams();
+  if (sport && sport !== "All") p.set("sport", sport);
+  if (area) p.set("area", area);
+  if (phone) p.set("phone", phone);
+  if (mine) p.set("mine", "1");
+  const data = await request(`/api/players${p.toString() ? `?${p}` : ""}`);
+  return data.requests || [];
+}
+
+export async function createPlayerRequest(payload) {
+  const data = await request("/api/players", { method: "POST", body: JSON.stringify(payload) });
+  return data.request;
+}
+
+export async function joinPlayerRequest(id, { name, phone }) {
+  return request(`/api/players/${id}/join`, { method: "POST", body: JSON.stringify({ name, phone }) });
+}
+
+export async function leavePlayerRequest(id, phone) {
+  return request(`/api/players/${id}/leave`, { method: "POST", body: JSON.stringify({ phone }) });
+}
+
+export async function closePlayerRequest(id, phone) {
+  return request(`/api/players/${id}/close`, { method: "POST", body: JSON.stringify({ phone }) });
+}
+
+export async function getPlayerContacts(id, phone) {
+  return request(`/api/players/${id}/contacts?phone=${encodeURIComponent(phone)}`);
+}
+
+// --- Chat ---
+export async function getChatRooms() {
+  const data = await request("/api/chat/rooms");
+  return data.rooms || [];
+}
+
+export async function getChatSenderId(phone) {
+  const data = await request(`/api/chat/me?phone=${encodeURIComponent(phone)}`);
+  return data.senderId;
+}
+
+export async function getChatMessages(room, { phone, before } = {}) {
+  const p = new URLSearchParams();
+  if (phone) p.set("phone", phone);
+  if (before) p.set("before", before);
+  return request(`/api/chat/${encodeURIComponent(room)}/messages${p.toString() ? `?${p}` : ""}`);
+}
+
+export async function sendChatMessage(room, { name, phone, text }) {
+  const data = await request(`/api/chat/${encodeURIComponent(room)}/messages`, {
+    method: "POST",
+    body: JSON.stringify({ name, phone, text }),
+  });
+  return data.message;
+}
+
+// --- Community feed ---
+export async function getCommunityPosts({ sport, page = 1, phone } = {}) {
+  const p = new URLSearchParams({ page: String(page) });
+  if (sport && sport !== "All") p.set("sport", sport);
+  if (phone) p.set("phone", phone);
+  return request(`/api/community/posts?${p}`);
+}
+
+export async function createCommunityPost(payload) {
+  const data = await request("/api/community/posts", { method: "POST", body: JSON.stringify(payload) });
+  return data.post;
+}
+
+export async function toggleLikePost(id, phone) {
+  const data = await request(`/api/community/posts/${id}/like`, { method: "POST", body: JSON.stringify({ phone }) });
+  return data.post;
+}
+
+export async function commentOnPost(id, { name, phone, text }) {
+  const data = await request(`/api/community/posts/${id}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ name, phone, text }),
+  });
+  return data.post;
+}
+
+export async function deleteMyPost(id, phone) {
+  return request(`/api/community/posts/${id}/delete`, { method: "POST", body: JSON.stringify({ phone }) });
+}
+
+// --- Student / Corporate zones ---
+export async function submitZoneEnquiry(payload) {
+  const data = await request("/api/zones/enquiries", { method: "POST", body: JSON.stringify(payload) });
+  return data.enquiry;
+}
+
+export async function getMyZoneEnquiries(phone) {
+  const data = await request(`/api/zones/enquiries/mine?phone=${encodeURIComponent(phone)}`);
+  return data.enquiries || [];
+}

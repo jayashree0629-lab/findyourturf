@@ -9,6 +9,10 @@ import {
   IconX,
   IconShield,
   IconCollapse,
+  IconTicket,
+  IconAward,
+  IconBell,
+  IconRadio,
 } from "../common/Icons";
 
 export default function Sidebar({
@@ -32,8 +36,12 @@ export default function Sidebar({
     { id: "events", label: "Events", icon: IconCalendar, count: counts.events },
     { id: "turfs", label: "Turfs", icon: IconMapPin, count: counts.turfs },
     { id: "addons", label: "Add-ons", icon: IconSparkles },
+    { id: "bookings", label: "Bookings", icon: IconTicket, count: counts.bookings },
     { id: "visitors", label: "Visitors", icon: IconUsers },
     { id: "live-matches", label: "Live Matches", icon: IconLive },
+    { id: "community", label: "Community", icon: IconRadio },
+    { id: "enquiries", label: "Zone Requests", icon: IconBell, count: counts.enquiries },
+    { id: "coupons", label: "Coupons", icon: IconAward },
   ];
 
   return (

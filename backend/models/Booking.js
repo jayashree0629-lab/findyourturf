@@ -81,6 +81,10 @@ const bookingSchema = new mongoose.Schema(
         // equipment rental). Line detail lives in the AddonBooking collection.
         addonsAmount: { type: Number, default: 0, min: 0 },
 
+        // Coupon applied at checkout. totalAmount is already net of this.
+        couponCode: { type: String, default: "", trim: true },
+        discountAmount: { type: Number, default: 0, min: 0 },
+
         totalAmount: {
             type: Number,
             required: true

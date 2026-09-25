@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   Home as HomeIcon,
@@ -7,7 +6,6 @@ import {
   PlayCircle,
   User,
 } from "lucide-react";
-import LockedFeatureModal from "./LockedFeatureModal";
 
 const ITEMS = [
   { path: "/", label: "Home", Icon: HomeIcon },
@@ -20,12 +18,11 @@ const ITEMS = [
 export default function BottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [lockedFeature, setLockedFeature] = useState("");
 
   return (
     <nav className="fyt-bottom-nav">
       <div className="fyt-bottom-nav-inner">
-        {ITEMS.map(({ path, altPath, label, Icon, locked }) => {
+        {ITEMS.map(({ path, altPath, label, Icon }) => {
           const active =
             path === "/"
               ? location.pathname === "/"
@@ -34,7 +31,7 @@ export default function BottomNav() {
             <button
               key={path}
               className={`fyt-bnav-item ${active ? "active" : ""}`}
-              onClick={() => locked ? setLockedFeature(label) : navigate(path)}
+              onClick={() => navigate(path)}
               aria-label={label}
             >
               <div className="fyt-bnav-icon-box">
@@ -46,9 +43,6 @@ export default function BottomNav() {
           );
         })}
       </div>
-      {lockedFeature && (
-        <LockedFeatureModal feature={lockedFeature} onClose={() => setLockedFeature("")} />
-      )}
     </nav>
   );
 }
