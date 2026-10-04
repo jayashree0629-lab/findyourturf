@@ -1,14 +1,16 @@
 import { useState, useEffect } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import "./App.css";
 import AdminDashboard from "./pages/AdminDashboard";
 import TournamentManagement from "./pages/TournamentManagement";
 import LiveScoringConsole from "./pages/LiveScoringConsole";
 import AdminLogin from "./pages/AdminLogin";
+import OwnerPortal from "./pages/OwnerPortal";
 import { isAdminAuthenticated } from "./services/auth";
 
 function App() {
+  const location = useLocation();
   const [authed, setAuthed] = useState(() => isAdminAuthenticated());
 
   // Keep auth state in sync if the token changes in another tab, or is
@@ -22,6 +24,16 @@ function App() {
       window.removeEventListener("admin-auth-changed", sync);
     };
   }, []);
+
+  // A turf owner's private booking page. It is opened from a secret link and
+  // needs no admin login.
+  if (location.pathname.startsWith("/owner/")) {
+    return (
+      <Routes>
+        <Route path="/owner/:token" element={<OwnerPortal />} />
+      </Routes>
+    );
+  }
 
   if (!authed) {
     return (

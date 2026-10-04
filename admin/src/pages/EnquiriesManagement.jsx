@@ -1,17 +1,19 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Modal from "../components/common/Modal";
 import { socket } from "../services/socket";
-import { IconBell } from "../components/common/Icons";
+import { IconBell, IconIdCard } from "../components/common/Icons";
 import {
   getZoneEnquiries,
   updateZoneEnquiry,
   approveZoneEnquiry,
   deleteZoneEnquiry,
+  getZoneIdProof,
 } from "../services/api";
 import {
   useFlash,
   FlashBanner,
   PageHeader,
+  PageIntro,
   Pill,
   EmptyBox,
   ConfirmModal,
@@ -36,6 +38,17 @@ export default function EnquiriesManagement() {
   const [note, setNote] = useState(null); // { enquiry, status, text }
   const [toDelete, setToDelete] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [idView, setIdView] = useState(null); // { loading, name, idNumber, organization, image, error }
+
+  const viewId = async (enquiry) => {
+    setIdView({ loading: true, name: enquiry.name, organization: enquiry.organization, idNumber: enquiry.idNumber });
+    try {
+      const res = await getZoneIdProof(enquiry._id);
+      setIdView({ loading: false, name: res.name, organization: res.organization, idNumber: res.idNumber, image: res.idProof });
+    } catch (err) {
+      setIdView({ loading: false, name: enquiry.name, error: err.message });
+    }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -146,9 +159,16 @@ export default function EnquiriesManagement() {
   return (
     <div style={{ padding: 20 }}>
       <PageHeader
-        title="Zone Requests"
-        subtitle="Student and Corporate zone requests from the public site. Approve a request to issue the player a personal discount coupon."
+        title="Student & corporate requests"
+        subtitle="Requests from players who want a student discount or are planning a company event."
       />
+
+      <PageIntro icon={IconIdCard} title="What are these requests?">
+        <strong style={{ display: "inline" }}>Student zone:</strong> a student uploads their college ID card. Open the ID, check it,
+        then Approve to give them a personal discount coupon.{" "}
+        <strong style={{ display: "inline" }}>Corporate zone:</strong> a company asks about a team outing or league — call them and
+        approve or close the request once you've arranged it.
+      </PageIntro>
 
       <FlashBanner flash={flash} onDismiss={() => setFlash(null)} />
 
@@ -201,6 +221,18 @@ export default function EnquiriesManagement() {
                   {e.preferredDate ? ` · wants ${formatDate(e.preferredDate, { utc: true })}` : ""}
                 </div>
                 {e.message && <div style={{ color: "#64748b", marginTop: 4 }}>“{e.message}”</div>}
+                {e.zone === "student" && (
+                  <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    {e.hasIdProof ? (
+                      <button className="btn btn-secondary btn-sm" onClick={() => viewId(e)}>
+                        <IconIdCard size={14} /> View ID card
+                      </button>
+                    ) : (
+                      <Pill tone="amber">No ID uploaded</Pill>
+                    )}
+                    {e.idNumber && <span className="muted">ID no. {e.idNumber}</span>}
+                  </div>
+                )}
                 {e.couponCode && (
                   <div style={{ marginTop: 4 }}>
                     Coupon: <code style={{ fontWeight: 800 }}>{e.couponCode}</code>
@@ -302,6 +334,24 @@ export default function EnquiriesManagement() {
               <button className="btn btn-coral" onClick={() => quickStatus(note.enquiry, "Rejected", note.text)} disabled={busy}>Reject request</button>
             </div>
           </>
+        )}
+      </Modal>
+
+      <Modal isOpen={Boolean(idView)} onClose={() => setIdView(null)} title={idView ? `College ID · ${idView.name}` : ""} maxWidth="560px">
+        {idView && (
+          <div className="modal-body">
+            {idView.loading && <p style={{ margin: 0 }}>Loading the ID card…</p>}
+            {idView.error && <div className="alert-banner error">{idView.error}</div>}
+            {idView.image && (
+              <>
+                <div className="muted" style={{ marginBottom: 8 }}>
+                  {idView.organization}{idView.idNumber ? ` · ID no. ${idView.idNumber}` : ""}
+                </div>
+                <img src={idView.image} alt={`College ID of ${idView.name}`} style={{ width: "100%", borderRadius: 10, border: "1px solid #e5e7eb" }} />
+                <p className="muted" style={{ marginBottom: 0 }}>Check that the name and photo match, and that it's a current student ID.</p>
+              </>
+            )}
+          </div>
         )}
       </Modal>
 

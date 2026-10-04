@@ -223,6 +223,13 @@ export async function undoLiveBall(matchId) {
   });
 }
 
+export async function endLiveInnings(matchId) {
+  return request(`/api/live-matches/${matchId}/end-innings`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+}
+
 export async function completeLiveMatch(matchId) {
   return request(`/api/live-matches/${matchId}/complete`, {
     method: "POST",
@@ -542,4 +549,62 @@ export async function getAdminChatMessages(room) {
 
 export async function deleteChatMessage(id) {
   return request(`/api/chat/admin-messages/${id}`, { method: "DELETE", headers: authHeaders() });
+}
+
+// ==========================================
+// TURF OWNERS + OWNER ALERTS
+// ==========================================
+export async function getTurfOwners() {
+  const data = await request("/api/owners", { headers: authHeaders() });
+  return data.owners || [];
+}
+
+export async function saveTurfOwner(turfId, payload) {
+  const data = await request(`/api/owners/turf/${turfId}`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  return data.owner;
+}
+
+export async function removeTurfOwner(turfId) {
+  return request(`/api/owners/turf/${turfId}`, { method: "DELETE", headers: authHeaders() });
+}
+
+export async function regenerateOwnerLink(turfId) {
+  const data = await request(`/api/owners/turf/${turfId}/regenerate-link`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  return data.accessToken;
+}
+
+export async function getOwnerAlerts(status) {
+  const q = status ? `?status=${status}` : "";
+  return request(`/api/owners/notifications${q}`, { headers: authHeaders() });
+}
+
+export async function markOwnerAlertSent(id) {
+  return request(`/api/owners/notifications/${id}/sent`, { method: "PUT", headers: authHeaders() });
+}
+
+export async function markAllOwnerAlertsSent() {
+  return request("/api/owners/notifications/mark-all-sent", { method: "POST", headers: authHeaders() });
+}
+
+// Owner's own read-only portal (no admin login, token in the link).
+export async function getOwnerPortal(token) {
+  return request(`/api/owner-portal/${encodeURIComponent(token)}`);
+}
+
+export async function markSplitMemberPaid(bookingId, phone) {
+  return request(`/api/bookings/${bookingId}/split/${encodeURIComponent(phone)}/paid`, {
+    method: "PUT",
+    headers: authHeaders(),
+  });
+}
+
+export async function getZoneIdProof(enquiryId) {
+  return request(`/api/zones/enquiries/${enquiryId}/id-proof`, { headers: authHeaders() });
 }

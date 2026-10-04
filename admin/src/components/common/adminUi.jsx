@@ -138,3 +138,34 @@ export function formatDate(value, { time = false, utc = false } = {}) {
 export function money(n) {
   return `₹${Number(n || 0).toLocaleString("en-IN")}`;
 }
+
+// A short "what is this page for" note, shown at the top of sections that
+// aren't self-explanatory.
+export function PageIntro({ icon: Icon, title, children }) {
+  return (
+    <div className="page-intro">
+      {Icon && (
+        <span className="page-intro-ico">
+          <Icon size={17} />
+        </span>
+      )}
+      <div>
+        <strong>{title}</strong>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// Search box + optional A–Z / Z–A style sort used at the top of list pages.
+export const SORT_OPTIONS = [
+  { id: "name_asc", label: "Name: A to Z" },
+  { id: "name_desc", label: "Name: Z to A" },
+];
+
+export function sortByName(list, sortId, getName = (x) => x.name) {
+  const copy = [...list];
+  const cmp = (a, b) => String(getName(a) || "").localeCompare(String(getName(b) || ""), undefined, { sensitivity: "base" });
+  copy.sort(sortId === "name_desc" ? (a, b) => cmp(b, a) : cmp);
+  return copy;
+}

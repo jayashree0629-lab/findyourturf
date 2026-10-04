@@ -9,8 +9,20 @@ import {
   IconClock,
   IconCheck,
   IconX,
+  IconSearch,
+  IconPhone,
 } from "../components/common/Icons";
-import { getTurfs, createTurf, updateTurf, deleteTurf } from "../services/api";
+import {
+  getTurfs,
+  createTurf,
+  updateTurf,
+  deleteTurf,
+  getTurfOwners,
+  saveTurfOwner,
+  removeTurfOwner,
+  regenerateOwnerLink,
+} from "../services/api";
+import { PageIntro, SORT_OPTIONS, sortByName } from "../components/common/adminUi";
 
 const ROOF_TYPES = ["Not verified", "Open", "Closed", "Partial"];
 
@@ -33,6 +45,12 @@ const BLANK_FORM = {
   description: "",
   status: "Active",
 };
+
+const BLANK_OWNER = { name: "", phone: "", email: "" };
+
+function portalUrl(token) {
+  return `${window.location.origin}/owner/${token}`;
+}
 
 function money(v) {
   return v === null || v === undefined || v === "" ? "Not verified" : `₹${v}`;
@@ -78,12 +96,17 @@ export default function TurfManagement() {
   const [form, setForm] = useState(BLANK_FORM);
   const [equipment, setEquipment] = useState([]);
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [owners, setOwners] = useState({});
+  const [ownerForm, setOwnerForm] = useState(BLANK_OWNER);
+  const [query, setQuery] = useState("");
+  const [sortBy, setSortBy] = useState("name_asc");
 
   const fetchTurfs = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await getTurfs();
+      const [data, ownerList] = await Promise.all([getTurfs(), getTurfOwners().catch(() => [])]);
       setTurfs(Array.isArray(data) ? data : []);
+      setOwners(Object.fromEntries(ownerList.map((o) => [String(o.turfId), o])));
       setError("");
     } catch (err) {
       setError(err.message || "Unable to load turfs.");
@@ -106,13 +129,22 @@ export default function TurfManagement() {
   }, [fetchTurfs]);
 
   const filtered = useMemo(() => {
-    if (statusFilter === "ALL") return turfs;
-    return turfs.filter((t) => (t.status || "Active") === statusFilter);
-  }, [turfs, statusFilter]);
+    const q = query.trim().toLowerCase();
+    const list = turfs.filter((t) => {
+      if (statusFilter !== "ALL" && (t.status || "Active") !== statusFilter) return false;
+      if (!q) return true;
+      const owner = owners[String(t._id)];
+      return [t.name, t.location, t.address, (t.sports || []).join(" "), t.sportType, owner && owner.name]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q));
+    });
+    return sortByName(list, sortBy);
+  }, [turfs, statusFilter, query, sortBy, owners]);
 
   function openCreate() {
     setEditingId(null);
     setForm(BLANK_FORM);
+    setOwnerForm(BLANK_OWNER);
     setEquipment([]);
     setError("");
     setIsModalOpen(true);
@@ -121,6 +153,8 @@ export default function TurfManagement() {
   function openEdit(turf) {
     setEditingId(turf._id);
     setForm(toForm(turf));
+    const owner = owners[String(turf._id)];
+    setOwnerForm(owner ? { name: owner.name, phone: owner.phone, email: owner.email || "" } : BLANK_OWNER);
     setEquipment((turf.equipment || []).map((e) => ({ name: e.name, rentalCharge: e.rentalCharge ?? 0 })));
     setError("");
     setIsModalOpen(true);
@@ -163,16 +197,35 @@ export default function TurfManagement() {
       setError("Turf name and area/location are required.");
       return;
     }
+    const ownerDigits = ownerForm.phone.replace(/[^0-9]/g, "").slice(-10);
+    const hasOwnerInput = ownerForm.name.trim() || ownerForm.phone.trim();
+    if (hasOwnerInput && (!ownerForm.name.trim() || !/^[6-9][0-9]{9}$/.test(ownerDigits))) {
+      setError("Owner details need a name and a valid 10-digit mobile number (or leave both blank).");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
       const payload = buildPayload();
+      let turfId = editingId;
       if (editingId) {
         await updateTurf(editingId, payload);
         setNotice("Turf updated.");
       } else {
-        await createTurf(payload);
+        const created = await createTurf(payload);
+        turfId = created && created.turf ? created.turf._id : null;
         setNotice("Turf added.");
+      }
+      if (turfId) {
+        if (hasOwnerInput) {
+          await saveTurfOwner(turfId, {
+            name: ownerForm.name.trim(),
+            phone: ownerDigits,
+            email: ownerForm.email.trim(),
+          });
+        } else if (owners[String(turfId)]) {
+          await removeTurfOwner(turfId);
+        }
       }
       setIsModalOpen(false);
       setEditingId(null);
@@ -237,7 +290,7 @@ export default function TurfManagement() {
     <div style={{ padding: "20px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
         <div>
-          <h2 style={{ margin: 0 }}>Turf Management</h2>
+          <h2 style={{ margin: 0 }}>Turfs &amp; owners</h2>
           <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 13 }}>
             {counts.all} turfs · {counts.active} active · {counts.inactive} inactive
           </p>
@@ -245,6 +298,21 @@ export default function TurfManagement() {
         <button className="btn btn-primary" onClick={openCreate}>
           <IconPlus size={16} /> Add Turf
         </button>
+      </div>
+
+      <PageIntro icon={IconPhone} title="Who gets told when someone books?">
+        Add each turf's owner (name + mobile number). When a player books, cancels or a teammate pays a split share, an alert is
+        prepared for that owner under <em>Owner alerts</em>. You can also share the owner's private booking page with them.
+      </PageIntro>
+
+      <div className="toolbar">
+        <div className="toolbar-search">
+          <span><IconSearch size={15} /></span>
+          <input className="form-control" placeholder="Search turf, area, sport or owner" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search turfs" />
+        </div>
+        <select className="form-control" value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Sort turfs">
+          {SORT_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+        </select>
       </div>
 
       <div className="filter-pills-group" style={{ marginBottom: 16 }}>
@@ -319,6 +387,13 @@ export default function TurfManagement() {
                     <span>Facilities: {(turf.facilities && turf.facilities.length) ? turf.facilities.join(", ") : "Not verified"}</span>
                     <span>Equipment: {(turf.equipment && turf.equipment.length) ? turf.equipment.map((e) => e.name).join(", ") : "Not verified"}</span>
                     <span>Contact: {turf.contactNumber || "Not verified"}</span>
+                    {owners[String(turf._id)] ? (
+                      <span>
+                        Owner: <strong>{owners[String(turf._id)].name}</strong> · {owners[String(turf._id)].phone}
+                      </span>
+                    ) : (
+                      <span style={{ color: "#b45309", fontWeight: 600 }}>No owner contact — add one to send booking alerts</span>
+                    )}
                     <span>Weather: {turf.weatherLocation || "Coimbatore"}{turf.latitude != null ? " (GPS set)" : ""}</span>
                   </div>
 
@@ -326,6 +401,31 @@ export default function TurfManagement() {
                     <button className="btn btn-outline btn-sm" disabled={busyId === turf._id} onClick={() => openEdit(turf)}>
                       <IconEdit size={13} /> Edit
                     </button>
+                    {owners[String(turf._id)] && (
+                      <>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(portalUrl(owners[String(turf._id)].accessToken));
+                              setNotice("Owner page link copied. Send it to " + owners[String(turf._id)].name + ".");
+                            } catch {
+                              setError("Couldn't copy the link.");
+                            }
+                          }}
+                        >
+                          Copy owner link
+                        </button>
+                        <a
+                          className="btn btn-outline btn-sm"
+                          href={portalUrl(owners[String(turf._id)].accessToken)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Open owner page
+                        </a>
+                      </>
+                    )}
                     <button className="btn btn-outline btn-sm" disabled={busyId === turf._id} onClick={() => toggleStatus(turf)}>
                       {active ? <><IconX size={13} /> Deactivate</> : <><IconCheck size={13} /> Activate</>}
                     </button>
@@ -474,6 +574,45 @@ export default function TurfManagement() {
           <div className="form-group">
             <label>Notes / Description</label>
             <textarea name="description" value={form.description} onChange={change} className="form-control" rows={2} />
+          </div>
+
+          <div style={{ marginTop: 8, padding: 14, borderRadius: 12, background: "#f8fafc", border: "1px solid #eef0f4" }}>
+            <strong style={{ display: "block", marginBottom: 2 }}>Turf owner</strong>
+            <span className="muted" style={{ display: "block", marginBottom: 10 }}>
+              Booking alerts (including split-payment updates) are prepared for this person.
+            </span>
+            <div className="form-row" style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <div className="form-group" style={{ flex: "1 1 200px" }}>
+                <label>Owner name</label>
+                <input className="form-control" value={ownerForm.name} onChange={(e) => setOwnerForm((o) => ({ ...o, name: e.target.value }))} placeholder="e.g. Ravi Kumar" />
+              </div>
+              <div className="form-group" style={{ flex: "1 1 200px" }}>
+                <label>Owner mobile (WhatsApp)</label>
+                <input className="form-control" value={ownerForm.phone} onChange={(e) => setOwnerForm((o) => ({ ...o, phone: e.target.value.replace(/[^0-9]/g, "").slice(0, 10) }))} placeholder="10-digit number" inputMode="numeric" />
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Owner email <span style={{ color: "#94a3b8" }}>(optional)</span></label>
+              <input className="form-control" type="email" value={ownerForm.email} onChange={(e) => setOwnerForm((o) => ({ ...o, email: e.target.value }))} placeholder="owner@example.com" />
+            </div>
+            {editingId && owners[String(editingId)] && (
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={async () => {
+                  if (!window.confirm("Reset the owner's private page link? The old link will stop working.")) return;
+                  try {
+                    await regenerateOwnerLink(editingId);
+                    setNotice("Owner link reset. Copy the new one from the turf card.");
+                    await fetchTurfs();
+                  } catch (err) {
+                    setError(err.message);
+                  }
+                }}
+              >
+                Reset owner page link
+              </button>
+            )}
           </div>
 
           <div className="form-actions" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>

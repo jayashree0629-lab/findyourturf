@@ -14,7 +14,8 @@ import BookingsManagement from "./BookingsManagement";
 import CouponsManagement from "./CouponsManagement";
 import EnquiriesManagement from "./EnquiriesManagement";
 import CommunityManagement from "./CommunityManagement";
-import BusinessInsights from "../components/common/BusinessInsights";
+import DashboardOverview from "../components/common/DashboardOverview";
+import OwnerAlerts from "./OwnerAlerts";
 import {
   IconCalendar,
   IconTrophy,
@@ -58,11 +59,14 @@ import {
   cancelBooking,
   getUsers,
   getInsights,
+  getTurfs,
 } from "../services/api";
 import { socket } from "../services/socket";
 import { getAdmin } from "../services/auth";
 
 const ROUNDS = ["Round 1", "Round 2", "Semi Final", "Final"];
+
+const EVENT_STATUS_OPTIONS = ["Upcoming", "Ongoing", "Completed", "Cancelled"];
 
 const emptyEventForm = {
   eventName: "",
@@ -83,6 +87,7 @@ const emptyEventForm = {
   contactPhone: "",
   eventImage: "",
   registrationLink: "",
+  status: "Upcoming",
 };
 
 export default function AdminDashboard() {
@@ -101,6 +106,8 @@ export default function AdminDashboard() {
   const [events, setEvents] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [insights, setInsights] = useState(null);
+  const [turfs, setTurfs] = useState([]);
+  const [navFilter, setNavFilter] = useState("");
   const [insightsError, setInsightsError] = useState("");
   const [users, setUsers] = useState([]);
   const [dashboardStats, setDashboardStats] = useState(null);
@@ -177,14 +184,19 @@ export default function AdminDashboard() {
       setLoading(true);
       setError("");
 
-      const [eventsData, statsData, bookingsData, usersData, insightsData] =
+      const [eventsData, statsData, bookingsData, usersData, insightsData, turfsData] =
         await Promise.allSettled([
           getEvents(),
           getDashboardStats(),
           getBookings(),
           getUsers(),
           getInsights(),
+          getTurfs(),
         ]);
+
+      if (turfsData.status === "fulfilled") {
+        setTurfs(Array.isArray(turfsData.value) ? turfsData.value : []);
+      }
 
       if (insightsData.status === "fulfilled") {
         setInsights(insightsData.value);
@@ -278,6 +290,7 @@ export default function AdminDashboard() {
       contactPhone: event.contactPhone || "",
       eventImage: event.eventImage || "",
       registrationLink: event.registrationLink || "",
+      status: event.status === "Active" ? "Upcoming" : event.status || "Upcoming",
     });
     setEventModalOpen(true);
   }
@@ -579,6 +592,25 @@ export default function AdminDashboard() {
   const totalTeamsCount = (tournament.teams || []).length;
   const totalBookingsCount = bookings.length;
 
+  // Every sport a turf offers (plus any already used by an event), so events can
+  // be filtered and created for any of them.
+  const sportOptions = useMemo(() => {
+    const generic = new Set(["multi-sport", "sports complex", "turf", "indoor turf", "not verified"]);
+    const set = new Map();
+    const add = (name) => {
+      const clean = String(name || "").trim();
+      if (!clean || generic.has(clean.toLowerCase())) return;
+      set.set(clean.toLowerCase(), clean);
+    };
+    ["Cricket", "Football"].forEach(add);
+    turfs.forEach((t) => {
+      (t.sports || []).forEach(add);
+      add(t.sportType);
+    });
+    events.forEach((e) => add(e.sport));
+    return [...set.values()].sort((a, b) => a.localeCompare(b));
+  }, [turfs, events]);
+
   const filteredEvents = useMemo(() => {
     return events.filter((ev) => {
       const matchSearch =
@@ -606,7 +638,8 @@ export default function AdminDashboard() {
     teams: totalTeamsCount,
     matches: totalMatchesCount,
     liveMatches: liveMatches.length,
-    bookings: bookings.filter((b) => b.status === "Pending").length,
+    bookings: bookings.filter((b) => b.status !== "Cancelled" && b.payment && b.payment.amountPending > 0).length,
+    ownerAlerts: insights?.owners?.alertsPending || 0,
     enquiries: insights?.community?.openEnquiries || 0,
     users: users.length,
   };
@@ -623,17 +656,19 @@ export default function AdminDashboard() {
           : activeTab === "live-matches"
           ? "Live Matches Console"
           : activeTab === "turfs"
-          ? "Turf Management"
+          ? "Turfs & owners"
           : activeTab === "addons"
-          ? "Add-ons Management"
+          ? "Add-on services"
           : activeTab === "visitors"
-          ? "Visitors"
+          ? "Registered players"
+          : activeTab === "owner-alerts"
+          ? "Owner alerts"
           : activeTab === "bookings"
           ? "Bookings"
           : activeTab === "coupons"
-          ? "Coupons"
+          ? "Offers & coupons"
           : activeTab === "enquiries"
-          ? "Zone Requests"
+          ? "Student & corporate requests"
           : activeTab === "community"
           ? "Community"
           : "System Settings"
@@ -674,79 +709,16 @@ export default function AdminDashboard() {
           ------------------------------------------------------------------- */}
       {activeTab === "overview" && (
         <>
-          <BusinessInsights data={insights} error={insightsError} onNavigate={setActiveTab} />
-
-          {/* 4 Stat Cards */}
-          <div className="stats-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
-            <StatCard
-              label="Total Events"
-              value={dashboardStats?.totalEvents ?? totalEventsCount}
-              icon={IconCalendar}
-              color="blue"
-              trend="All registered tournaments"
-              trendType="positive"
-            />
-            <StatCard
-              label="Active Tournaments"
-              value={dashboardStats?.activeEvents ?? events.length}
-              icon={IconTrophy}
-              color="violet"
-              trend="In execution phase"
-              trendType="neutral"
-            />
-            <StatCard
-              label="Total Teams"
-              value={totalTeamsCount}
-              icon={IconUsers}
-              color="indigo"
-              trend="Assigned across rosters"
-              trendType="positive"
-            />
-            <StatCard
-              label="Live Matches"
-              value={liveMatches.length}
-              icon={IconLive}
-              color="coral"
-              trend={liveMatches.length > 0 ? "Currently in progress" : "No live matches right now"}
-              trendType={liveMatches.length > 0 ? "live" : "neutral"}
-            />
-          </div>
-
-          {/* Active Live Action Banner */}
-          {liveMatches.length > 0 && (
-            <div className="card" style={{ borderColor: "#f43f5e" }}>
-              <div className="card-header">
-                <div className="card-header-left">
-                  <span className="card-badge-label" style={{ color: "#f43f5e", display: "flex", alignItems: "center", gap: "6px" }}>
-                    <IconLive size={14} />
-                    <span>Real-Time Action</span>
-                  </span>
-                  <h2 className="card-title">Live Match Broadcasts ({liveMatches.length})</h2>
-                </div>
-                <button
-                  className="btn btn-coral btn-sm"
-                  onClick={() => setActiveTab("livescore")}
-                >
-                  <span>Open Live Scoring</span>
-                </button>
-              </div>
-
-              <div className="matches-grid">
-                {liveMatches.map((match) => (
-                  <MatchCardComponent
-                    key={match._id}
-                    match={match}
-                    teams={tournament.teams || []}
-                    onScoreUpdate={handleScoreUpdate}
-                    onWinnerUpdate={handleWinnerUpdate}
-                    onSave={handleMatchSave}
-                    onDelete={handleDeleteMatch}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
+          <DashboardOverview
+            data={insights}
+            error={insightsError}
+            adminName={getAdmin()?.name}
+            tournaments={{ events: totalEventsCount, live: liveMatches.length }}
+            onNavigate={(tab, filter) => {
+              setNavFilter(filter || "");
+              setActiveTab(tab);
+            }}
+          />
         </>
       )}
 
@@ -772,7 +744,14 @@ export default function AdminDashboard() {
         <VisitorsManagement />
       )}
 
-      {activeTab === "bookings" && <BookingsManagement />}
+      {activeTab === "bookings" && <BookingsManagement key={navFilter} initialFilter={navFilter || "Upcoming"} />}
+      {activeTab === "owner-alerts" && (
+        <OwnerAlerts
+          onCountChange={(n) =>
+            setInsights((prev) => (prev ? { ...prev, owners: { ...prev.owners, alertsPending: n } } : prev))
+          }
+        />
+      )}
       {activeTab === "coupons" && <CouponsManagement />}
       {activeTab === "enquiries" && <EnquiriesManagement />}
       {activeTab === "community" && <CommunityManagement />}
@@ -802,7 +781,7 @@ export default function AdminDashboard() {
               <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text-secondary)", marginRight: "4px" }}>
                 Filter Sport:
               </span>
-              {["ALL", "Cricket", "Football"].map((sport) => (
+              {["ALL", ...sportOptions].map((sport) => (
                 <button
                   key={sport}
                   className={`filter-pill ${sportFilter === sport ? "active" : ""}`}
@@ -1384,8 +1363,9 @@ export default function AdminDashboard() {
                     value={eventForm.sport}
                     onChange={(e) => setEventForm({ ...eventForm, sport: e.target.value })}
                   >
-                    <option value="Cricket">Cricket</option>
-                    <option value="Football">Football</option>
+                    {sportOptions.map((sport) => (
+                      <option key={sport} value={sport}>{sport}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -1441,6 +1421,22 @@ export default function AdminDashboard() {
                     onChange={(e) => setEventForm({ ...eventForm, location: e.target.value })}
                     required
                   />
+                </div>
+
+                <div className="form-group col-6">
+                  <label className="form-label">Registration Status *</label>
+                  <select
+                    className="form-control"
+                    value={eventForm.status}
+                    onChange={(e) => setEventForm({ ...eventForm, status: e.target.value })}
+                  >
+                    {EVENT_STATUS_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                  <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "4px" }}>
+                    Registration is only open while a tournament is Upcoming.
+                  </p>
                 </div>
               </div>
             </div>

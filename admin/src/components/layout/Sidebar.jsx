@@ -13,6 +13,7 @@ import {
   IconAward,
   IconBell,
   IconRadio,
+  IconIdCard,
 } from "../common/Icons";
 
 export default function Sidebar({
@@ -31,17 +32,36 @@ export default function Sidebar({
     }
   };
 
-  const navItems = [
-    { id: "overview", label: "Dashboard", icon: IconDashboard },
-    { id: "events", label: "Events", icon: IconCalendar, count: counts.events },
-    { id: "turfs", label: "Turfs", icon: IconMapPin, count: counts.turfs },
-    { id: "addons", label: "Add-ons", icon: IconSparkles },
-    { id: "bookings", label: "Bookings", icon: IconTicket, count: counts.bookings },
-    { id: "visitors", label: "Visitors", icon: IconUsers },
-    { id: "live-matches", label: "Live Matches", icon: IconLive },
-    { id: "community", label: "Community", icon: IconRadio },
-    { id: "enquiries", label: "Zone Requests", icon: IconBell, count: counts.enquiries },
-    { id: "coupons", label: "Coupons", icon: IconAward },
+  const groups = [
+    {
+      label: "Overview",
+      items: [{ id: "overview", label: "Dashboard", icon: IconDashboard }],
+    },
+    {
+      label: "Turf business",
+      items: [
+        { id: "bookings", label: "Bookings", icon: IconTicket, count: counts.bookings },
+        { id: "turfs", label: "Turfs & owners", icon: IconMapPin },
+        { id: "owner-alerts", label: "Owner alerts", icon: IconBell, count: counts.ownerAlerts },
+        { id: "addons", label: "Add-on services", icon: IconSparkles },
+      ],
+    },
+    {
+      label: "Tournaments",
+      items: [
+        { id: "events", label: "Events", icon: IconCalendar, count: counts.events },
+        { id: "live-matches", label: "Live matches", icon: IconLive },
+      ],
+    },
+    {
+      label: "Players & offers",
+      items: [
+        { id: "visitors", label: "Registered players", icon: IconUsers },
+        { id: "enquiries", label: "Student & corporate", icon: IconIdCard, count: counts.enquiries },
+        { id: "coupons", label: "Offers & coupons", icon: IconAward },
+        { id: "community", label: "Community", icon: IconRadio },
+      ],
+    },
   ];
 
   return (
@@ -106,36 +126,31 @@ export default function Sidebar({
         </div>
 
         <div className="sidebar-nav-container">
-          {!collapsed && <div className="nav-section-label">Main Menu</div>}
+          {groups.map((group) => (
+            <div key={group.label}>
+              {!collapsed && <div className="nav-section-label">{group.label}</div>}
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
 
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    className={`nav-item ${isActive ? "active" : ""}`}
+                    onClick={() => handleNavClick(item.id)}
+                    title={collapsed ? item.label : undefined}
+                  >
+                    <Icon size={19} />
+                    {!collapsed && <span>{item.label}</span>}
 
-            return (
-              <button
-                key={item.id}
-                className={`nav-item ${isActive ? "active" : ""}`}
-                onClick={() => handleNavClick(item.id)}
-                title={collapsed ? item.label : undefined}
-              >
-                <Icon size={19} />
-                {!collapsed && <span>{item.label}</span>}
-
-                {item.count !== undefined &&
-                  item.count !== null &&
-                  item.count > 0 && (
-                    <span
-                      className={`nav-badge ${
-                        item.isLive ? "live-pulse-badge" : ""
-                      }`}
-                    >
-                      {item.count}
-                    </span>
-                  )}
-              </button>
-            );
-          })}
+                    {item.count !== undefined && item.count !== null && item.count > 0 && (
+                      <span className="nav-badge">{item.count}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </div>
       </aside>
     </>

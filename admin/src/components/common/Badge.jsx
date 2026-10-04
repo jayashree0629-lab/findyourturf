@@ -16,7 +16,7 @@ export default function Badge({
   let badgeClass = "badge-upcoming";
   let showLivePulse = false;
 
-  if (normalized === "live") {
+  if (normalized === "live" || normalized === "ongoing") {
     badgeClass = "badge-live";
     showLivePulse = true;
   } else if (normalized === "completed" || normalized === "confirmed") {

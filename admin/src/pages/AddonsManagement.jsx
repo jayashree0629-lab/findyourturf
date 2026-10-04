@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { socket } from "../services/socket";
 import Modal from "../components/common/Modal";
-import { IconPlus, IconEdit, IconTrash, IconCheck, IconX, IconSparkles } from "../components/common/Icons";
+import { IconPlus, IconEdit, IconTrash, IconCheck, IconX, IconSparkles, IconSearch } from "../components/common/Icons";
+import { SORT_OPTIONS, sortByName } from "../components/common/adminUi";
 import {
   getAddons,
   createAddon,
@@ -68,6 +69,8 @@ export default function AddonsManagement() {
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState("");
   const [form, setForm] = useState(BLANK);
+  const [query, setQuery] = useState("");
+  const [sortBy, setSortBy] = useState("name_asc");
 
   const fetchAll = useCallback(async () => {
     try {
@@ -98,7 +101,17 @@ export default function AddonsManagement() {
     };
   }, [fetchAll]);
 
-  const rows = useMemo(() => addons.filter((a) => a.type === tab), [addons, tab]);
+  const rows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = addons.filter((a) => {
+      if (a.type !== tab) return false;
+      if (!q) return true;
+      return [a.name, a.description, a.sport, a.specialization, a.category, a.packageDetails]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q));
+    });
+    return sortByName(list, sortBy);
+  }, [addons, tab, query, sortBy]);
   const bookingCount = useCallback(
     (id) => bookings.filter((b) => String(b.service?._id || b.service) === String(id) && b.status !== "Cancelled").length,
     [bookings]
@@ -239,6 +252,16 @@ export default function AddonsManagement() {
             {t.label} ({addons.filter((a) => a.type === t.id).length})
           </button>
         ))}
+      </div>
+
+      <div className="toolbar">
+        <div className="toolbar-search">
+          <span><IconSearch size={15} /></span>
+          <input className="form-control" placeholder="Search by name, sport or details" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search add-ons" />
+        </div>
+        <select className="form-control" value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Sort add-ons">
+          {SORT_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+        </select>
       </div>
 
       {error && <div className="alert-banner error" style={{ marginBottom: 12 }}>{error}</div>}

@@ -6,6 +6,7 @@ import {
   useFlash,
   FlashBanner,
   PageHeader,
+  PageIntro,
   Pill,
   EmptyBox,
   ConfirmModal,
@@ -127,6 +128,12 @@ export default function CouponsManagement() {
           <IconPlus size={16} /> New coupon
         </button>
       </PageHeader>
+
+      <PageIntro icon={IconAward} title="What are offers & coupons?">
+        A coupon is a code a player types at checkout to get money off a booking (for example WELCOME100 = ₹100 off).
+        Create your own promo codes here. Coupons are also created automatically when a player redeems reward points or when you
+        approve a student / corporate request — those appear in this list too. Each coupon can be used once per mobile number.
+      </PageIntro>
 
       <FlashBanner flash={flash} onDismiss={() => setFlash(null)} />
 

@@ -15,6 +15,7 @@ import {
   useFlash,
   FlashBanner,
   PageHeader,
+  PageIntro,
   Pill,
   EmptyBox,
   ConfirmModal,
@@ -373,6 +374,11 @@ export default function CommunityManagement() {
         title="Community"
         subtitle="Moderate what players post, the games they organise and the chat rooms. Publish announcements to the public feed."
       />
+      <PageIntro icon={IconUsers} title="What is Community?">
+        The player-facing Community area lets players post in a public feed, host games that need extra players,
+        and chat in rooms. You don't need to do anything here day to day — use this page to publish an announcement
+        (shown pinned at the top of the feed), hide or delete anything inappropriate, and close games or remove chat messages.
+      </PageIntro>
       <FlashBanner flash={flash} onDismiss={() => setFlash(null)} />
       <div className="filter-pills-group" style={{ marginBottom: 14 }}>
         {TABS.map((t) => (
