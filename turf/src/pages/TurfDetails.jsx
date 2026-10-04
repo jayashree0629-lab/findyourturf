@@ -60,6 +60,7 @@ export default function TurfDetails() {
   const [loading, setLoading] = useState(true);
   const [isLiked, setIsLiked] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [brokenImages, setBrokenImages] = useState(() => new Set());
 
   const dateChips = useMemo(() => buildDateChips(7), []);
   const [selectedDate, setSelectedDate] = useState(dateChips[0].fullDate);
@@ -182,7 +183,10 @@ export default function TurfDetails() {
   const hours = Math.max(1, duration / 60);
   const availCount = slots.filter((s) => s.available).length;
 
-  const galleryImages = [getTurfImage(turf, 0), getTurfImage(turf, 1), getTurfImage(turf, 2)];
+  const galleryImages = [getTurfImage(turf, 0), getTurfImage(turf, 1), getTurfImage(turf, 2)].map((src, i) =>
+    brokenImages.has(i) ? "/cricket-turf.jpg" : src
+  );
+  const markImageBroken = (i) => setBrokenImages((prev) => (prev.has(i) ? prev : new Set(prev).add(i)));
   const facilities = turf.facilities && turf.facilities.length ? turf.facilities : [];
   const equipment = turf.equipment || [];
   const roof = ROOF_LABEL[turf.roofType] || ROOF_LABEL["Not verified"];
@@ -236,7 +240,12 @@ export default function TurfDetails() {
             <div className="fyt-td-left-col">
               <div className="fyt-td-gallery">
                 <div className="fyt-td-main-image-wrap">
-                  <img src={galleryImages[activeImageIndex]} alt={turf.name} className="fyt-td-main-img" />
+                  <img
+                    src={galleryImages[activeImageIndex]}
+                    alt={turf.name}
+                    className="fyt-td-main-img"
+                    onError={() => markImageBroken(activeImageIndex)}
+                  />
                   <div className="fyt-td-img-overlay">
                     <span className="fyt-td-sport-pill">
                       {sportList.length ? sportList.join(" · ") : "Turf"}
@@ -253,7 +262,7 @@ export default function TurfDetails() {
                       className={`fyt-td-thumb ${activeImageIndex === idx ? "active" : ""}`}
                       onClick={() => setActiveImageIndex(idx)}
                     >
-                      <img src={img} alt={`View ${idx + 1}`} />
+                      <img src={img} alt={`View ${idx + 1}`} onError={() => markImageBroken(idx)} />
                     </button>
                   ))}
                 </div>

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, Navigate } from "react-router-dom";
-import { GraduationCap, Building2, BadgePercent, CalendarClock, Users, Trophy, Copy, CheckCircle2, Clock } from "lucide-react";
+import { GraduationCap, Building2, BadgePercent, CalendarClock, Users, Trophy, Copy, CheckCircle2, Clock, IdCard, X } from "lucide-react";
 import PageShell from "../components/PageShell";
 import { useIdentity, useToast } from "../components/AppProviders";
 import { submitZoneEnquiry, getMyZoneEnquiries } from "../services/api";
@@ -50,6 +50,35 @@ const ZONES = {
   },
 };
 
+// Shrinks a photo of an ID card to a small JPEG (about 100-250 KB) in the
+// browser before it is uploaded, so phone camera photos don't hit size limits.
+function compressImage(file, maxSide = 1280, quality = 0.78) {
+  return new Promise((resolve, reject) => {
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
+      reject(new Error("Please choose a JPG, PNG or WebP photo."));
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      const out = canvas.toDataURL("image/jpeg", quality);
+      if (out.length > 800000) reject(new Error("That photo is too large. Try a smaller or clearer photo."));
+      else resolve(out);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("We couldn't read that photo. Please try another."));
+    };
+    img.src = url;
+  });
+}
+
 const STATUS_TONE = { New: "info", "In Review": "warn", Approved: "success", Rejected: "danger", Closed: "" };
 
 function fmtDate(v) {
@@ -66,6 +95,21 @@ export default function ZonePage() {
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const [mine, setMine] = useState([]);
+  const [idNumber, setIdNumber] = useState("");
+  const [idProof, setIdProof] = useState("");
+  const fileRef = useRef(null);
+
+  const pickFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      setIdProof(await compressImage(file));
+      setErrors((prev) => ({ ...prev, idProof: undefined }));
+    } catch (err) {
+      setErrors((prev) => ({ ...prev, idProof: err.message }));
+    }
+  };
 
   const loadMine = useCallback(async () => {
     if (!identity.ready) return;
@@ -92,6 +136,7 @@ export default function ZonePage() {
     const next = {};
     if (!form.organization.trim()) next.organization = `Please enter your ${zone.orgLabel.toLowerCase()}.`;
     if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) next.email = "Enter a valid email or leave it blank.";
+    if (zoneParam === "student" && !idProof) next.idProof = "Please upload a photo of your college ID card.";
     setErrors(next);
     if (Object.keys(next).length) return;
 
@@ -107,9 +152,12 @@ export default function ZonePage() {
         ...form,
         groupSize: Number(form.groupSize) || 1,
         preferredDate: form.preferredDate || undefined,
+        ...(zoneParam === "student" ? { idNumber: idNumber.trim(), idProofImage: idProof } : {}),
       });
       toast.success("Request sent! We'll be in touch soon.");
       setForm({ organization: "", detail: "", groupSize: 1, sport: "", preferredDate: "", email: "", message: "" });
+      setIdNumber("");
+      setIdProof("");
       await loadMine();
     } catch (err) {
       toast.error(err.message);
@@ -195,6 +243,33 @@ export default function ZonePage() {
                   <input id="z-date" className="fyt-x-input" type="date" min={new Date().toISOString().slice(0, 10)} value={form.preferredDate} onChange={set("preferredDate")} />
                 </div>
               </div>
+              {zoneParam === "student" && (
+                <div className="fyt-x-stack" style={{ gap: 10 }}>
+                  <div className="fyt-x-field">
+                    <label htmlFor="z-idno">College ID number <span className="fyt-x-muted">(optional)</span></label>
+                    <input id="z-idno" className="fyt-x-input" value={idNumber} onChange={(e) => setIdNumber(e.target.value)} placeholder="e.g. 21CS045" maxLength={40} />
+                  </div>
+                  <div className="fyt-x-field">
+                    <label>College ID card photo *</label>
+                    <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={pickFile} hidden />
+                    {idProof ? (
+                      <div className="ui-upload-preview">
+                        <img src={idProof} alt="Your college ID card" />
+                        <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" style={{ marginTop: 8 }} onClick={() => setIdProof("")}>
+                          <X size={14} /> Remove and choose another
+                        </button>
+                      </div>
+                    ) : (
+                      <button type="button" className="ui-upload" onClick={() => fileRef.current && fileRef.current.click()}>
+                        <span className="ico"><IdCard size={22} /></span>
+                        <span><b>Upload or take a photo</b><span className="d">Front of your college ID. Make sure your name and photo are clear.</span></span>
+                      </button>
+                    )}
+                    {errors.idProof && <div className="fyt-x-error">{errors.idProof}</div>}
+                    <small>Only our team can see your ID, and it is used just to verify you are a student.</small>
+                  </div>
+                </div>
+              )}
               <div className="fyt-x-field">
                 <label htmlFor="z-email">Email <span className="fyt-x-muted">(optional)</span></label>
                 <input id="z-email" className="fyt-x-input" type="email" value={form.email} onChange={set("email")} placeholder="name@example.com" maxLength={100} />

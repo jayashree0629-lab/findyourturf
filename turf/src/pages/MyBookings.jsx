@@ -115,7 +115,15 @@ function BookingCard({ b, cancelWindowHours, onCancel }) {
     <article className="fyt-x-card fyt-x-booking">
       <div className="fyt-x-booking-top">
         <div className="fyt-x-row" style={{ alignItems: "flex-start", flexWrap: "nowrap" }}>
-          <img className="fyt-x-booking-thumb" src={getTurfImage(turf, 0)} alt="" loading="lazy" />
+          <img
+            className="fyt-x-booking-thumb"
+            src={getTurfImage(turf, 0)}
+            alt=""
+            loading="lazy"
+            onError={(event) => {
+              event.currentTarget.src = "/cricket-turf.jpg";
+            }}
+          />
           <div>
             <h3 className="fyt-x-card-title">{turf.name || "Turf"}</h3>
             <div className="fyt-x-meta" style={{ marginTop: 4 }}>
@@ -149,10 +157,40 @@ function BookingCard({ b, cancelWindowHours, onCancel }) {
           </strong>
         </div>
         <div className="fyt-x-when-item">
-          <span>Total paid</span>
+          <span>{b.payment && b.payment.amountPending > 0 ? "Total" : "Total paid"}</span>
           <strong>₹{b.totalAmount}</strong>
         </div>
       </div>
+
+      {!cancelled && b.payment && b.payment.amountPending > 0 && (
+        <div className="fyt-x-inline-msg info" style={{ background: "#FEF3E2", color: "#B45309", border: "1px solid #FDE68A" }}>
+          <strong>₹{b.payment.amountPending} still to pay.</strong>{" "}
+          {b.payment.mode === "split"
+            ? `${b.payment.membersPaid + 1} of ${b.players} players have paid their ₹${b.payment.share} share. Your slot is confirmed once everyone has paid.`
+            : b.payment.mode === "venue"
+            ? "Pay this amount at the venue when you arrive."
+            : "This booking is waiting for payment."}
+          {b.payment.mode === "split" && (b.splitMembers || []).some((m) => !m.paid) && (
+            <ul style={{ margin: "8px 0 0", paddingLeft: 18, display: "grid", gap: 4 }}>
+              {(b.splitMembers || []).filter((m) => !m.paid).map((m) => (
+                <li key={m.phone}>
+                  {m.name || "Teammate"} · +91 {m.phone} —{" "}
+                  <a
+                    href={`https://wa.me/91${String(m.phone).replace(/\D/g, "").slice(-10)}?text=${encodeURIComponent(
+                      `Hi ${m.name || ""}, please pay your ₹${b.payment.share} share for our turf booking at ${turf.name || "the turf"} on ${fmtDate(b.bookingDate)} at ${b.startTime}. Ref ${bookingRef(b)}.`
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontWeight: 700, textDecoration: "underline" }}
+                  >
+                    Send reminder
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {(b.couponCode || (b.addons && b.addons.length > 0)) && (
         <div className="fyt-x-row">

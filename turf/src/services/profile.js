@@ -107,6 +107,21 @@ export function saveVisitor({ visitorId, name, phone }) {
   return record;
 }
 
+// Signs this device out: forgets who the player is and the bookings cached
+// locally. Everything on the server (bookings, points, coupons) stays linked
+// to their mobile number, so signing back in restores it.
+export function logout() {
+  try {
+    localStorage.removeItem(VISITOR_KEY);
+    localStorage.removeItem(PROFILE_KEY);
+    localStorage.removeItem(BOOKINGS_KEY);
+    localStorage.removeItem(NOTIF_SEEN_KEY);
+  } catch {
+    /* ignore */
+  }
+  window.location.assign("/");
+}
+
 // --- Notification "unread" tracking ---
 export function getNotificationsSeenAt() {
   try {

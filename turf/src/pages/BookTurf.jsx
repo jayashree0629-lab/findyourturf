@@ -1,243 +1,165 @@
 import { useState, useEffect, useMemo } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { Search, SlidersHorizontal, ArrowLeft, X, Sparkles } from "lucide-react";
+import { useLocation } from "react-router-dom";
+import { Search, X, SearchX } from "lucide-react";
 import { getTurfs } from "../services/api";
 import Navbar from "../components/Navbar";
 import BottomNav from "../components/BottomNav";
-import TurfCard from "../components/TurfCard";
-import { TurfCardSkeleton } from "../components/SkeletonLoader";
+import Footer from "../components/Footer";
+import TurfCard, { TurfCardSkeletons, turfSportList } from "../components/TurfCard";
 import EmptyState from "../components/EmptyState";
 
-const SPORTS = [
-  { id: "ALL", name: "All Sports", icon: "🏆" },
-  { id: "Football", name: "Football", icon: "⚽" },
-  { id: "Cricket", name: "Cricket", icon: "🏏" },
-  { id: "Box Cricket", name: "Box Cricket", icon: "🏏" },
-  { id: "Pickleball", name: "Pickleball", icon: "🎾" },
+const SORTS = [
+  { id: "recommended", label: "Recommended" },
+  { id: "name_asc", label: "Name: A to Z" },
+  { id: "name_desc", label: "Name: Z to A" },
+  { id: "price_asc", label: "Price: Low to High" },
+  { id: "price_desc", label: "Price: High to Low" },
 ];
 
-function turfSports(t) {
-  const list = Array.isArray(t.sports) && t.sports.length ? t.sports : t.sportType ? [t.sportType] : [];
-  return list.map((s) => String(s).toLowerCase());
-}
-
 export default function BookTurf() {
-  const navigate = useNavigate();
   const location = useLocation();
+  const params = new URLSearchParams(location.search);
+
   const [turfs, setTurfs] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  const searchParams = new URLSearchParams(location.search);
-  const initialSport = searchParams.get("sport") || "ALL";
-  const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "");
-  const [selectedSport, setSelectedSport] = useState(initialSport);
+  const [error, setError] = useState("");
+  const [query, setQuery] = useState(params.get("q") || "");
+  const [sport, setSport] = useState(params.get("sport") || "All");
+  const [area, setArea] = useState("All");
   const [sortBy, setSortBy] = useState("recommended");
 
-  const dateChips = useMemo(() => {
-    const chips = [];
-    const today = new Date();
-    for (let i = 0; i < 7; i++) {
-      const d = new Date();
-      d.setDate(today.getDate() + i);
-      chips.push({
-        day: i === 0 ? "TODAY" : i === 1 ? "TOMORROW" : d.toLocaleDateString("en-IN", { weekday: "short" }).toUpperCase(),
-        num: d.getDate().toString().padStart(2, "0"),
-        month: d.toLocaleDateString("en-IN", { month: "short" }),
-        fullDate: d.toISOString().split("T")[0],
-      });
-    }
-    return chips;
-  }, []);
-
-  const [selectedDate, setSelectedDate] = useState(dateChips[0].fullDate);
-
   useEffect(() => {
-    async function loadTurfs() {
-      try {
-        setLoading(true);
-        const data = await getTurfs();
-        // The booking catalogue shows every configured turf. Slot availability
-        // is checked on the detail/checkout flow instead of hiding venues here.
-        const list = Array.isArray(data) ? data : [];
-        setTurfs(list);
-      } catch (err) {
-        console.error("Failed to load turfs:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadTurfs();
+    let active = true;
+    getTurfs()
+      .then((data) => active && setTurfs(Array.isArray(data) ? data : []))
+      .catch((err) => active && setError(err.message || "Couldn't load turfs."))
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const filteredTurfs = useMemo(() => {
+  // Filter options are built from the turfs that actually exist.
+  const sportOptions = useMemo(() => {
+    const set = new Set();
+    turfs.forEach((t) => turfSportList(t).forEach((s) => set.add(s)));
+    return ["All", ...[...set].sort((a, b) => a.localeCompare(b))];
+  }, [turfs]);
+
+  const areaOptions = useMemo(() => {
+    const set = new Set(turfs.map((t) => t.location).filter(Boolean));
+    return ["All", ...[...set].sort((a, b) => a.localeCompare(b))];
+  }, [turfs]);
+
+  const shown = useMemo(() => {
     let list = [...turfs];
-
-    if (selectedSport && selectedSport !== "ALL") {
-      const want = selectedSport.toLowerCase();
-      list = list.filter((t) => turfSports(t).some((s) => s.includes(want) || want.includes(s)));
+    if (sport !== "All") {
+      const want = sport.toLowerCase();
+      list = list.filter((t) => turfSportList(t).some((s) => s.toLowerCase() === want));
     }
+    if (area !== "All") list = list.filter((t) => t.location === area);
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
+    const q = query.trim().toLowerCase();
+    if (q) {
       list = list.filter(
         (t) =>
           (t.name || "").toLowerCase().includes(q) ||
           (t.location || "").toLowerCase().includes(q) ||
           (t.address || "").toLowerCase().includes(q) ||
-          turfSports(t).some((s) => s.includes(q))
+          turfSportList(t).some((s) => s.toLowerCase().includes(q))
       );
     }
 
-    if (sortBy === "price_asc") {
-      list.sort((a, b) => (a.pricePerHour ?? Infinity) - (b.pricePerHour ?? Infinity));
-    } else if (sortBy === "price_desc") {
-      list.sort((a, b) => (b.pricePerHour ?? -1) - (a.pricePerHour ?? -1));
+    const byName = (a, b) => (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" });
+    if (sortBy === "name_asc") list.sort(byName);
+    else if (sortBy === "name_desc") list.sort((a, b) => byName(b, a));
+    else if (sortBy === "price_asc") list.sort((a, b) => (a.pricePerHour || Infinity) - (b.pricePerHour || Infinity));
+    else if (sortBy === "price_desc") list.sort((a, b) => (b.pricePerHour || -1) - (a.pricePerHour || -1));
+    else {
+      // Turfs you can book online come first.
+      list.sort((a, b) => Number(b.pricePerHour > 0) - Number(a.pricePerHour > 0));
     }
     return list;
-  }, [turfs, selectedSport, searchQuery, sortBy]);
+  }, [turfs, sport, area, query, sortBy]);
 
-  const handleResetFilters = () => {
-    setSearchQuery("");
-    setSelectedSport("ALL");
+  const reset = () => {
+    setQuery("");
+    setSport("All");
+    setArea("All");
     setSortBy("recommended");
   };
+  const filtered = query || sport !== "All" || area !== "All";
 
   return (
     <div className="fyt-app-shell">
       <Navbar />
-
-      <main className="fyt-main-content" style={{ paddingBottom: 110 }}>
-        <div className="fyt-page-banner">
-          <div className="fyt-container">
-            <div className="fyt-td-nav-bar" style={{ padding: 0, marginBottom: 12 }}>
-              <button className="fyt-back-btn" onClick={() => navigate(-1)} aria-label="Go Back">
-                <ArrowLeft size={18} />
-                <span>Back</span>
-              </button>
-              <div className="fyt-pb-badge" style={{ margin: 0 }}>
-                <Sparkles size={14} /> <span>Coimbatore Turfs</span>
-              </div>
-            </div>
-
-            <div className="fyt-pb-content">
-              <h1 className="fyt-pb-title">Book Your Turf</h1>
-              <p className="fyt-pb-desc">
-                Real turf venues across Coimbatore. Pick a date and time slot to book.
-              </p>
-            </div>
-
-            <div className="fyt-search-bar-wrap">
-              <div className="fyt-search-box">
-                <Search size={20} className="fyt-search-icon" />
-                <input
-                  type="text"
-                  placeholder="Search turf or area (Singanallur, Peelamedu, Ganapathy)…"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="fyt-search-input"
-                />
-                {searchQuery && (
-                  <button className="fyt-search-clear" onClick={() => setSearchQuery("")} aria-label="Clear search">
-                    <X size={16} />
-                  </button>
-                )}
-              </div>
-            </div>
+      <main className="ui-page-main">
+        <div className="ui-container">
+          <div className="ui-pagehead">
+            <h1>Book a turf</h1>
+            <p>Choose a venue in Coimbatore, pick a date and time, and confirm your slot in a minute.</p>
           </div>
-        </div>
 
-        <section className="fyt-filters-section">
-          <div className="fyt-container">
-            <div className="fyt-filter-group">
-              <span className="fyt-filter-group-label">Sport:</span>
-              <div className="fyt-chips-scroll">
-                {SPORTS.map((sport) => (
-                  <button
-                    key={sport.id}
-                    className={`fyt-sport-chip ${selectedSport === sport.id ? "active" : ""}`}
-                    onClick={() => setSelectedSport(sport.id)}
-                  >
-                    <span className="fyt-chip-icon">{sport.icon}</span>
-                    <span>{sport.name}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="fyt-filter-group" style={{ marginTop: 12 }}>
-              <span className="fyt-filter-group-label">Date:</span>
-              <div className="fyt-chips-scroll">
-                {dateChips.map((chip) => (
-                  <button
-                    key={chip.fullDate}
-                    className={`fyt-date-chip ${selectedDate === chip.fullDate ? "active" : ""}`}
-                    onClick={() => setSelectedDate(chip.fullDate)}
-                  >
-                    <span className="fyt-dc-day">{chip.day}</span>
-                    <span className="fyt-dc-num">{chip.num}</span>
-                    <span className="fyt-dc-month">{chip.month}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="fyt-subfilter-bar">
-              <div className="fyt-results-counter">
-                Showing <strong>{filteredTurfs.length}</strong> turf{filteredTurfs.length === 1 ? "" : "s"}
-                {selectedSport !== "ALL" && ` for ${selectedSport}`}
-              </div>
-
-              <div className="fyt-sort-dropdown-wrap">
-                <SlidersHorizontal size={14} className="fyt-sort-icon" />
-                <select
-                  className="fyt-sort-select"
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  aria-label="Sort Turfs"
-                >
-                  <option value="recommended">Recommended</option>
-                  <option value="price_asc">Price: Low to High</option>
-                  <option value="price_desc">Price: High to Low</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="fyt-turfs-grid-section" style={{ paddingBottom: 24 }}>
-          <div className="fyt-container">
-            <div className="fyt-section-header-row" style={{ marginBottom: 16 }}>
-              <div>
-                <span className="fyt-section-kicker">COIMBATORE</span>
-                <h2 className="fyt-section-title">Turf Venues</h2>
-              </div>
-            </div>
-
-            {loading ? (
-              <div className="fyt-grid-3">
-                {[1, 2, 3].map((n) => (
-                  <TurfCardSkeleton key={n} />
-                ))}
-              </div>
-            ) : filteredTurfs.length === 0 ? (
-              <EmptyState
-                type="turfs"
-                title="No turfs found"
-                message="Try changing your search or sport filter."
-                actionLabel="Reset Filters"
-                onAction={handleResetFilters}
+          <div className="ui-filterbar">
+            <div className="ui-input-wrap">
+              <Search size={18} className="lead" />
+              <input
+                className="ui-input with-icon"
+                type="search"
+                placeholder="Search by turf name, area or sport"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="Search turfs"
               />
-            ) : (
-              <div className="fyt-grid-3">
-                {filteredTurfs.map((turf, idx) => (
-                  <TurfCard key={turf._id} turf={turf} index={idx} />
-                ))}
-              </div>
-            )}
+              {query && (
+                <button className="ui-clear" onClick={() => setQuery("")} aria-label="Clear search"><X size={16} /></button>
+              )}
+            </div>
+            <select className="ui-input" style={{ width: "auto", minWidth: 160 }} value={area} onChange={(e) => setArea(e.target.value)} aria-label="Filter by area">
+              {areaOptions.map((a) => <option key={a} value={a}>{a === "All" ? "All areas" : a}</option>)}
+            </select>
+            <select className="ui-input" style={{ width: "auto", minWidth: 180 }} value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Sort turfs">
+              {SORTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
           </div>
-        </section>
-      </main>
 
+          <div className="ui-chiprow" role="group" aria-label="Filter by sport">
+            {sportOptions.map((s) => (
+              <button key={s} className={`ui-chip ${sport === s ? "active" : ""}`} onClick={() => setSport(s)}>
+                {s === "All" ? "All sports" : s}
+              </button>
+            ))}
+          </div>
+
+          <p className="ui-count">
+            {loading ? "Loading turfs…" : <>Showing <b>{shown.length}</b> of {turfs.length} turf{turfs.length === 1 ? "" : "s"}</>}
+            {filtered && !loading && (
+              <button className="ui-btn ui-btn-ghost ui-btn-sm" style={{ marginLeft: 8 }} onClick={reset}>Clear filters</button>
+            )}
+          </p>
+
+          {error ? (
+            <EmptyState type="error" title="Couldn't load turfs" message={error} actionLabel="Try again" onAction={() => window.location.reload()} />
+          ) : loading ? (
+            <TurfCardSkeletons />
+          ) : shown.length === 0 ? (
+            <EmptyState
+              icon={<SearchX size={36} />}
+              title="No turfs match your search"
+              message="Try a different name, area or sport."
+              actionLabel="Clear filters"
+              onAction={reset}
+            />
+          ) : (
+            <div className="ui-grid">
+              {shown.map((turf, idx) => (
+                <TurfCard key={turf._id} turf={turf} index={idx} />
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+      <Footer />
       <BottomNav />
     </div>
   );

@@ -1,7 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 :root {
-  /* Brand Athletic Emerald & Indigo Colors */
+  /* Brand colors — kept identical to the --ui-* tokens in ui.css so every
+     screen (old and new components alike) renders the same blue. */
   --primary: #4058F5;
   --primary-hover: #3048E8;
   --primary-dark: #263AC2;

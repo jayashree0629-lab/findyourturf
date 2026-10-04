@@ -13,6 +13,7 @@ import {
 import { getEvents } from "../services/api";
 import { socket } from "../services/socket";
 import { getEventImage } from "../utils/sportsImages";
+import { isRegistrationOpen, registrationClosedLabel } from "../utils/registration";
 import Navbar from "../components/Navbar";
 import BottomNav from "../components/BottomNav";
 import { EventCardSkeleton } from "../components/SkeletonLoader";
@@ -99,6 +100,12 @@ export default function TournamentsPage() {
     return () => clearInterval(timer);
   }, [heroSlides.length]);
 
+  // Sport chips: the usual ones plus any sport an admin has created an event for.
+  const sportChips = [
+    "ALL",
+    ...new Set(["Cricket", "Football", "Badminton", ...allTournaments.map((t) => t.sport).filter(Boolean)]),
+  ];
+
   // Filter tournaments
   const filteredTournaments = allTournaments.filter((t) => {
     const matchesSport =
@@ -159,6 +166,9 @@ export default function TournamentsPage() {
                 src={heroSlides[heroSlide]}
                 alt={featuredTournament.eventName}
                 className="fyt-thb-bg"
+                onError={(e) => {
+                  e.currentTarget.src = "/cricket-turf.jpg";
+                }}
               />
               <div className="fyt-thb-scrim" />
               <div className="fyt-thb-content">
@@ -205,7 +215,7 @@ export default function TournamentsPage() {
         <section className="fyt-filters-section">
           <div className="fyt-container">
             <div className="fyt-chips-scroll">
-              {["ALL", "Cricket", "Football", "Badminton"].map((sport) => (
+              {sportChips.map((sport) => (
                 <button
                   key={sport}
                   className={`fyt-sport-chip ${selectedSport === sport ? "active" : ""}`}
@@ -265,7 +275,15 @@ export default function TournamentsPage() {
                     >
                       {/* Media Image */}
                       <div className="fyt-tsc-media">
-                        <img src={displayImg} alt={event.eventName} className="fyt-tsc-img" loading="lazy" />
+                        <img
+                          src={displayImg}
+                          alt={event.eventName}
+                          className="fyt-tsc-img"
+                          loading="lazy"
+                          onError={(e) => {
+                            e.currentTarget.src = "/cricket-turf.jpg";
+                          }}
+                        />
                         <div className="fyt-tsc-scrim" />
 
                         <div className="fyt-tsc-top-badges">
@@ -318,13 +336,14 @@ export default function TournamentsPage() {
 
                           <button
                             className="fyt-btn-view-tourney"
+                            disabled={!isRegistrationOpen(event.status)}
                             onClick={(e) => {
                               e.stopPropagation();
                               window.open(REGISTRATION_FORM_URL, "_blank", "noopener,noreferrer");
                             }}
                           >
-                            <span>Register</span>
-                            <ArrowRight size={14} />
+                            <span>{isRegistrationOpen(event.status) ? "Register" : registrationClosedLabel(event.status)}</span>
+                            {isRegistrationOpen(event.status) && <ArrowRight size={14} />}
                           </button>
                         </div>
                       </div>

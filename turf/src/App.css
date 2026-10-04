@@ -138,6 +138,13 @@
   box-shadow: var(--shadow-hover);
 }
 
+.fyt-btn-register:disabled {
+  background: var(--border-strong);
+  color: var(--text-muted);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
 .fyt-btn-secondary {
   display: inline-flex;
   align-items: center;
@@ -1310,6 +1317,11 @@
   color: var(--primary);
   font: inherit;
   font-weight: 800;
+}
+
+.fyt-inline-register-btn:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
 }
 
 .fyt-locked-sections-grid {
@@ -2486,6 +2498,11 @@
   background: var(--primary-light);
   padding: 2px 8px;
   border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+.fyt-bms-avail-count.none {
+  color: var(--text-muted);
+  background: var(--bg-subtle);
 }
 
 .fyt-bms-slots-grid {
@@ -3101,6 +3118,12 @@
 
 .fyt-btn-view-tourney:hover {
   background: var(--accent-indigo-hover);
+}
+
+.fyt-btn-view-tourney:disabled {
+  background: var(--border-strong);
+  color: var(--text-muted);
+  cursor: not-allowed;
 }
 
 /* ============================================================
@@ -3963,6 +3986,32 @@
 .fyt-sc-ball.is-bye,
 .fyt-sc-ball.is-legbye  { background: var(--color-info-bg); color: #1D4ED8; border-color: #BFDBFE; }
 
+/* ---- recent overs ---- */
+.fyt-sc-ovlist {
+  display: flex;
+  flex-direction: column;
+}
+.fyt-sc-ovrow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.fyt-sc-ovrow:last-child { border-bottom: none; padding-bottom: 0; }
+.fyt-sc-ovhead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+}
+.fyt-sc-ovtotal {
+  margin-left: auto;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
 /* ---- last ball ---- */
 .fyt-sc-lastball {
   display: flex;
@@ -4641,6 +4690,21 @@
   border: 1px solid #C7D2FE;
   border-radius: var(--radius-lg);
   margin-top: 14px;
+}
+
+.fyt-tourney-notice-closed {
+  background: var(--bg-subtle);
+  border-color: var(--border-default);
+}
+
+.fyt-tourney-notice-closed .fyt-tnb-icon {
+  color: var(--text-muted);
+  box-shadow: none;
+}
+
+.fyt-tourney-notice-closed .fyt-tnb-text strong,
+.fyt-tourney-notice-closed .fyt-tnb-text span {
+  color: var(--text-muted);
 }
 
 .fyt-tnb-icon {

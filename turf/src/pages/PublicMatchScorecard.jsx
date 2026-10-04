@@ -56,7 +56,7 @@ function fmtDate(value) {
 // "•","1".."6","W","2+W","Wd","Wd2","Nb","Nb1","1B","2Lb", ...) for styling.
 function ballKind(symRaw) {
   const sym = String(symRaw || "").trim();
-  if (/w/i.test(sym) && /^\d*\+?w/i.test(sym)) return "wkt";
+  if (/^\d*\+?w$/i.test(sym)) return "wkt";
   if (/^wd/i.test(sym)) return "wide";
   if (/^nb/i.test(sym)) return "noball";
   if (/lb$/i.test(sym)) return "legbye";
@@ -99,13 +99,18 @@ function topScorer(batting = []) {
   return played.reduce((best, b) => (b.runs > (best?.runs ?? -1) ? b : best), null);
 }
 
+// Live rows use `runsConceded`/`legalBalls`; archived rows use `runs`/`overs`.
+const runsAgainst = (b) => b.runsConceded ?? b.runs ?? 0;
+
 function bestBowler(bowling = []) {
-  const bowled = bowling.filter((b) => (b.legalBalls || 0) > 0 || (b.wickets || 0) > 0);
+  const bowled = bowling.filter(
+    (b) => (b.legalBalls || 0) > 0 || (b.wickets || 0) > 0 || (b.overs && b.overs !== "0.0")
+  );
   if (bowled.length === 0) return null;
   return bowled.reduce((best, b) => {
     if (!best) return b;
     if ((b.wickets || 0) !== (best.wickets || 0)) return b.wickets > best.wickets ? b : best;
-    return (b.runsConceded || 0) < (best.runsConceded || 0) ? b : best;
+    return runsAgainst(b) < runsAgainst(best) ? b : best;
   }, null);
 }
 
@@ -131,17 +136,136 @@ function StatusPill({ text, tone = "live" }) {
   return <span className={`fyt-sc-statuspill is-${tone}`}>{text}</span>;
 }
 
+// "Wd 2 · NB 1 · B 3 · LB 0" — only the extras that actually happened.
+function extrasBreakdownText(b = {}) {
+  const parts = [
+    ["Wd", b.wides],
+    ["NB", b.noBalls],
+    ["B", b.byes],
+    ["LB", b.legByes],
+  ].filter(([, n]) => n > 0);
+  return parts.map(([label, n]) => `${label} ${n}`).join(" · ");
+}
+
+// Completed overs of the innings being played (or the one just finished),
+// newest first. Built by the server from the recorded deliveries.
+function RecentOvers({ overs = [], innings }) {
+  const list = overs.filter((o) => o.complete && o.innings === innings).slice(-6).reverse();
+  if (list.length === 0) return null;
+  return (
+    <div className="fyt-card fyt-sc-block">
+      <h3 className="fyt-sc-h">Recent overs</h3>
+      <div className="fyt-sc-ovlist">
+        {list.map((o) => (
+          <div key={`${o.innings}-${o.over}`} className="fyt-sc-ovrow">
+            <div className="fyt-sc-ovhead">
+              <strong>Over {o.over}</strong>
+              {o.bowler && <span className="fyt-sc-dim">{o.bowler}</span>}
+              <span className="fyt-sc-ovtotal">
+                {o.runs} run{o.runs === 1 ? "" : "s"}
+                {o.wickets ? ` · ${o.wickets} wkt${o.wickets > 1 ? "s" : ""}` : ""}
+              </span>
+            </div>
+            <div className="fyt-sc-over-balls">
+              {o.balls.map((b, i) => (
+                <span key={i} className={`fyt-sc-ball is-${ballKind(b)}`}>{ballLabel(b)}</span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Full batting + bowling card for one live innings.
+function LiveInningsCard({ title, inn, strikerId }) {
+  const batting = inn.batting || [];
+  const bowling = inn.bowling || [];
+  if (batting.length === 0 && bowling.length === 0) return null;
+  const breakdown = extrasBreakdownText({
+    wides: inn.wides, noBalls: inn.noBalls, byes: inn.byes, legByes: inn.legByes,
+  });
+  return (
+    <div className="fyt-card fyt-sc-block">
+      <h3 className="fyt-sc-h">
+        {title} — {inn.runs || 0}/{inn.wickets || 0} ({oversText(inn.legalBalls)} ov)
+      </h3>
+      {batting.length > 0 && (
+        <div className="fyt-sc-tablewrap">
+          <table className="fyt-sc-table">
+            <thead>
+              <tr><th>Batter</th><th></th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr>
+            </thead>
+            <tbody>
+              {batting.map((b) => (
+                <tr key={b.playerId}>
+                  <td className="fyt-sc-td-name">
+                    {b.name}
+                    {strikerId && String(b.playerId) === String(strikerId) && !b.isOut ? " ★" : ""}
+                  </td>
+                  <td className="fyt-sc-td-dismissal">{b.isOut ? b.dismissalText : "not out"}</td>
+                  <td className="fyt-sc-num">{b.runs}</td>
+                  <td className="fyt-sc-num">{b.balls}</td>
+                  <td className="fyt-sc-num">{b.fours}</td>
+                  <td className="fyt-sc-num">{b.sixes}</td>
+                  <td className="fyt-sc-num">{sr(b.runs, b.balls)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="fyt-sc-foot">
+        Extras {inn.extras || 0}{breakdown ? ` (${breakdown})` : ""}
+      </p>
+
+      {bowling.length > 0 && (
+        <>
+          <h3 className="fyt-sc-h" style={{ marginTop: 16 }}>Bowling</h3>
+          <div className="fyt-sc-tablewrap">
+            <table className="fyt-sc-table">
+              <thead>
+                <tr><th>Bowler</th><th>O</th><th>M</th><th>R</th><th>W</th><th>NB</th><th>WD</th><th>Econ</th></tr>
+              </thead>
+              <tbody>
+                {bowling.map((b) => (
+                  <tr key={b.playerId}>
+                    <td className="fyt-sc-td-name">{b.name}</td>
+                    <td className="fyt-sc-num">{oversText(b.legalBalls)}</td>
+                    <td className="fyt-sc-num">{b.maidens || 0}</td>
+                    <td className="fyt-sc-num">{b.runsConceded}</td>
+                    <td className="fyt-sc-num">{b.wickets}</td>
+                    <td className="fyt-sc-num">{b.noBalls || 0}</td>
+                    <td className="fyt-sc-num">{b.wides || 0}</td>
+                    <td className="fyt-sc-num">{econ(b.runsConceded, b.legalBalls)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ---------------- LIVE ---------------- */
 
-function LiveScorecard({ match, ballEvents }) {
+function LiveScorecard({ match, ballEvents, overs = [] }) {
   const s = match.state || {};
-  const inningsKey = s.currentInnings === 2 ? "secondInnings" : "firstInnings";
+  // At the innings break the backend has already flipped to "innings 2", but
+  // nothing has been bowled in it yet — keep showing the finished 1st innings.
+  const isBreak = s.status === "INNINGS_BREAK";
+  const showFirst = isBreak || s.currentInnings !== 2;
+  const inningsKey = showFirst ? "firstInnings" : "secondInnings";
   const inn =
     (match.score && match.score[inningsKey]) || {
       runs: 0, wickets: 0, legalBalls: 0, extras: 0, batting: [], bowling: [], fallOfWickets: [],
     };
 
-  const battingSlot = s.battingTeamId;
+  // The side whose innings is on screen (teams are already swapped at the break).
+  const battingSlot = isBreak ? s.bowlingTeamId : s.battingTeamId;
   const battingTeam = battingSlot === "Team A" ? match.teamA : battingSlot === "Team B" ? match.teamB : null;
 
   const batting = inn.batting || [];
@@ -161,7 +285,7 @@ function LiveScorecard({ match, ballEvents }) {
   // This over: prefer the backend strip, else derive from ball events.
   let overStrip = Array.isArray(s.thisOver) ? s.thisOver : [];
   if (overStrip.length === 0 && ballEvents.length) {
-    const thisInnings = ballEvents.filter((b) => b.innings === (s.currentInnings || 1));
+    const thisInnings = ballEvents.filter((b) => b.innings === (showFirst ? 1 : 2));
     const lastOverNo = thisInnings.length ? thisInnings[thisInnings.length - 1].overNumber : null;
     overStrip = thisInnings
       .filter((b) => b.overNumber === lastOverNo)
@@ -185,8 +309,7 @@ function LiveScorecard({ match, ballEvents }) {
   const ballsLeft = match.overs * 6 - (inn.legalBalls || 0);
   const rrr = target && ballsLeft > 0 ? (need / (ballsLeft / 6)).toFixed(2) : null;
 
-  const isBreak = s.status === "INNINGS_BREAK";
-  const inningsLabel = s.currentInnings === 2 ? "2nd Innings" : "1st Innings";
+  const inningsLabel = showFirst ? "1st Innings" : "2nd Innings";
   const statusText = isBreak ? "Innings Break" : inningsLabel;
 
   const aName = teamName(match.teamA, "Team A");
@@ -232,8 +355,18 @@ function LiveScorecard({ match, ballEvents }) {
           </div>
         </div>
 
+        {/* TARGET SET (innings break) */}
+        {isBreak && target && (
+          <div className="fyt-sc-chase">
+            <div className="fyt-sc-chase-row">
+              <Target size={14} />
+              <span>Target <strong>{target}</strong> in {match.overs} overs</span>
+            </div>
+          </div>
+        )}
+
         {/* CHASE (2nd innings) */}
-        {s.currentInnings === 2 && target && (
+        {!isBreak && s.currentInnings === 2 && target && (
           <div className="fyt-sc-chase">
             <div className="fyt-sc-chase-row">
               <Target size={14} />
@@ -291,8 +424,8 @@ function LiveScorecard({ match, ballEvents }) {
               <div className="fyt-sc-crease">
                 <div className="fyt-sc-batrow">
                   <span className="fyt-sc-name">{bowler.name}</span>
-                  <span className="fyt-sc-rb">
-                    {oversText(bowler.legalBalls)} - {bowler.runsConceded} - {bowler.wickets}
+                  <span className="fyt-sc-rb" title="Overs - Maidens - Runs - Wickets">
+                    {oversText(bowler.legalBalls)} - {bowler.maidens || 0} - {bowler.runsConceded} - {bowler.wickets}
                   </span>
                   <span className="fyt-sc-sr">Econ {econ(bowler.runsConceded, bowler.legalBalls)}</span>
                 </div>
@@ -342,61 +475,21 @@ function LiveScorecard({ match, ballEvents }) {
         </div>
       )}
 
-      {/* ===== FULL BATTING CARD ===== */}
-      {batting.length > 0 && (
-        <div className="fyt-card fyt-sc-block">
-          <h3 className="fyt-sc-h">
-            {teamName(battingTeam, "Batting")} — {inn.runs || 0}/{inn.wickets || 0} ({oversText(inn.legalBalls)} ov)
-          </h3>
-          <div className="fyt-sc-tablewrap">
-            <table className="fyt-sc-table">
-              <thead>
-                <tr><th>Batter</th><th></th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr>
-              </thead>
-              <tbody>
-                {batting.map((b) => (
-                  <tr key={b.playerId}>
-                    <td className="fyt-sc-td-name">
-                      {b.name}
-                      {String(b.playerId) === String(s.strikerId) && !b.isOut ? " ★" : ""}
-                    </td>
-                    <td className="fyt-sc-td-dismissal">{b.isOut ? b.dismissalText : "not out"}</td>
-                    <td className="fyt-sc-num">{b.runs}</td>
-                    <td className="fyt-sc-num">{b.balls}</td>
-                    <td className="fyt-sc-num">{b.fours}</td>
-                    <td className="fyt-sc-num">{b.sixes}</td>
-                    <td className="fyt-sc-num">{sr(b.runs, b.balls)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="fyt-sc-foot">Extras {inn.extras || 0}</p>
+      {/* ===== RECENT OVERS ===== */}
+      <RecentOvers overs={overs} innings={isBreak ? 1 : s.currentInnings || 1} />
 
-          {bowling.length > 0 && (
-            <>
-              <h3 className="fyt-sc-h" style={{ marginTop: 16 }}>Bowling</h3>
-              <div className="fyt-sc-tablewrap">
-                <table className="fyt-sc-table">
-                  <thead>
-                    <tr><th>Bowler</th><th>O</th><th>R</th><th>W</th><th>Econ</th></tr>
-                  </thead>
-                  <tbody>
-                    {bowling.map((b) => (
-                      <tr key={b.playerId}>
-                        <td className="fyt-sc-td-name">{b.name}</td>
-                        <td className="fyt-sc-num">{oversText(b.legalBalls)}</td>
-                        <td className="fyt-sc-num">{b.runsConceded}</td>
-                        <td className="fyt-sc-num">{b.wickets}</td>
-                        <td className="fyt-sc-num">{econ(b.runsConceded, b.legalBalls)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </div>
+      {/* ===== SCORE BOARD: current innings first, then the earlier one ===== */}
+      <LiveInningsCard
+        title={`${teamName(battingTeam, "Batting")}${isBreak ? " (1st innings)" : ""}`}
+        inn={inn}
+        strikerId={isBreak ? null : s.strikerId}
+      />
+      {s.currentInnings === 2 && !isBreak && match.score?.firstInnings && (
+        <LiveInningsCard
+          title={`${teamName(battingSlot === "Team A" ? match.teamB : match.teamA, "1st innings")} (1st innings)`}
+          inn={match.score.firstInnings}
+          strikerId={null}
+        />
       )}
     </>
   );
@@ -443,7 +536,11 @@ function CompletedInnings({ card }) {
         </div>
       )}
 
-      <p className="fyt-sc-foot">Extras {card.extras || 0} · Total {card.runs}/{card.wickets}</p>
+      <p className="fyt-sc-foot">
+        Extras {card.extras || 0}
+        {extrasBreakdownText(card.extrasBreakdown) ? ` (${extrasBreakdownText(card.extrasBreakdown)})` : ""}
+        {" · "}Total {card.runs}/{card.wickets}
+      </p>
 
       {fow.length > 0 && (
         <div className="fyt-sc-fowlist">
@@ -460,15 +557,18 @@ function CompletedInnings({ card }) {
         <div className="fyt-sc-tablewrap" style={{ marginTop: 12 }}>
           <table className="fyt-sc-table">
             <thead>
-              <tr><th>Bowler</th><th>O</th><th>R</th><th>W</th><th>Econ</th></tr>
+              <tr><th>Bowler</th><th>O</th><th>M</th><th>R</th><th>W</th><th>NB</th><th>WD</th><th>Econ</th></tr>
             </thead>
             <tbody>
               {bowling.map((b, i) => (
                 <tr key={i}>
                   <td className="fyt-sc-td-name">{b.playerName}</td>
                   <td className="fyt-sc-num">{b.overs}</td>
+                  <td className="fyt-sc-num">{b.maidens ?? "-"}</td>
                   <td className="fyt-sc-num">{b.runs}</td>
                   <td className="fyt-sc-num">{b.wickets}</td>
+                  <td className="fyt-sc-num">{b.noBalls ?? "-"}</td>
+                  <td className="fyt-sc-num">{b.wides ?? "-"}</td>
                   <td className="fyt-sc-num">{b.economy}</td>
                 </tr>
               ))}
@@ -559,13 +659,13 @@ function CompletedScorecard({ match }) {
             {firstBest && (
               <div className="fyt-sc-hl-item">
                 <span className="fyt-sc-hl-label">Best bowler · {first.team || aName}</span>
-                <strong>{firstBest.playerName} {firstBest.wickets}/{firstBest.runsConceded}</strong>
+                <strong>{firstBest.playerName} {firstBest.wickets}/{runsAgainst(firstBest)}</strong>
               </div>
             )}
             {secondBest && (
               <div className="fyt-sc-hl-item">
                 <span className="fyt-sc-hl-label">Best bowler · {second.team || bName}</span>
-                <strong>{secondBest.playerName} {secondBest.wickets}/{secondBest.runsConceded}</strong>
+                <strong>{secondBest.playerName} {secondBest.wickets}/{runsAgainst(secondBest)}</strong>
               </div>
             )}
           </div>
@@ -590,6 +690,7 @@ export default function PublicMatchScorecard() {
   const [type, setType] = useState(null);
   const [match, setMatch] = useState(null);
   const [ballEvents, setBallEvents] = useState([]);
+  const [overs, setOvers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -600,6 +701,7 @@ export default function PublicMatchScorecard() {
       setType(data.type);
       setMatch(data.match);
       setBallEvents(Array.isArray(data.ballEvents) ? data.ballEvents : []);
+      setOvers(Array.isArray(data.overs) ? data.overs : []);
     } catch (err) {
       setError(err.message || "Unable to load scorecard.");
     } finally {
@@ -695,7 +797,7 @@ export default function PublicMatchScorecard() {
           {isCompleted ? (
             <CompletedScorecard match={match} />
           ) : (
-            <LiveScorecard match={match} ballEvents={ballEvents} />
+            <LiveScorecard match={match} ballEvents={ballEvents} overs={overs} />
           )}
         </div>
       </main>

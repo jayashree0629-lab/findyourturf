@@ -34,7 +34,11 @@ export default function BookMyShowSlotPicker({
       { id: "afternoon", label: "Afternoon Slots", period: "12:00 PM – 04:59 PM", icon: Sun, items: afternoon },
       { id: "evening", label: "Evening Slots", period: "05:00 PM – 08:59 PM", icon: Sunset, items: evening },
       { id: "night", label: "Night Slots", period: "09:00 PM Onwards", icon: Moon, items: night },
-    ].filter((group) => group.items.length > 0);
+    ]
+      // Drop time-of-day groups that have entirely lapsed (e.g. "Morning" once
+      // it's already afternoon) — showing a block of nothing but greyed-out
+      // "Past" buttons is just clutter, not useful information.
+      .filter((group) => group.items.some((s) => !s.isPast));
   }, [slots]);
 
   if (loading) {
@@ -91,8 +95,8 @@ export default function BookMyShowSlotPicker({
                   <strong>{group.label}</strong>
                   <span className="fyt-bms-group-period">{group.period}</span>
                 </div>
-                <span className="fyt-bms-avail-count">
-                  {availCount} {availCount === 1 ? "slot" : "slots"} open
+                <span className={`fyt-bms-avail-count ${availCount === 0 ? "none" : ""}`}>
+                  {availCount === 0 ? "Fully booked" : `${availCount} ${availCount === 1 ? "slot" : "slots"} open`}
                 </span>
               </div>
 

@@ -199,16 +199,44 @@ export async function getMatchScorecard(matchId) {
     type: data.type || (data.match ? "LIVE" : null),
     match: data.match || null,
     ballEvents: data.ballEvents || [],
+    overs: data.overs || [],
   };
 }
 
 // --- Quick visitor registration ---
-export async function registerVisitor({ name, phone }) {
+export async function registerVisitor({ name, phone, googleCredential }) {
   const data = await request("/api/visitors/register", {
     method: "POST",
-    body: JSON.stringify({ name, phone }),
+    body: JSON.stringify({ name, phone, googleCredential }),
   });
   return data.visitor;
+}
+
+// Existing player signing in with just a mobile number.
+export async function loginVisitor({ phone }) {
+  const data = await request("/api/visitors/login", {
+    method: "POST",
+    body: JSON.stringify({ phone }),
+  });
+  return data.visitor;
+}
+
+// Whether the backend has Google sign-in configured.
+export async function getAuthConfig() {
+  try {
+    return await request("/api/visitors/config");
+  } catch {
+    return { googleEnabled: false };
+  }
+}
+
+// Exchanges a Google credential for the player (if they've signed up before)
+// or the verified Google profile (if they still need to add a phone number).
+export async function googleSignIn(credential) {
+  return request("/api/visitors/google", {
+    method: "POST",
+    body: JSON.stringify({ credential }),
+  });
 }
 
 // --- My bookings (player self-service) ---

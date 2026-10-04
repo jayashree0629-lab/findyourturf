@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { MapPin, Star, Heart, Clock, ArrowRight, Sun, Warehouse, Zap, Phone } from "lucide-react";
 import { getTurfImage } from "../utils/sportsImages";
 import { generateSlots } from "../services/slots";
+import { TurfCardSkeleton } from "./SkeletonLoader";
 
 const SPORT_EMOJI = {
   football: "⚽",
@@ -14,16 +15,16 @@ const SPORT_EMOJI = {
   pickleball: "🎾",
 };
 
+export function turfSportList(turf) {
+  return Array.isArray(turf.sports) && turf.sports.length ? turf.sports : turf.sportType ? [turf.sportType] : [];
+}
+
 export default function TurfCard({ turf, index = 0, showSlots = true }) {
   const navigate = useNavigate();
   const [isLiked, setIsLiked] = useState(false);
   const [imageUrl, setImageUrl] = useState(() => getTurfImage(turf, index));
 
-  const sportList = Array.isArray(turf.sports) && turf.sports.length
-    ? turf.sports
-    : turf.sportType
-    ? [turf.sportType]
-    : [];
+  const sportList = turfSportList(turf);
   const sportLabel = sportList[0] || "Turf";
   const sportEmoji = SPORT_EMOJI[String(sportLabel).toLowerCase()] || "🏆";
 
@@ -174,5 +175,15 @@ export default function TurfCard({ turf, index = 0, showSlots = true }) {
         </div>
       </div>
     </article>
+  );
+}
+
+export function TurfCardSkeletons({ count = 6 }) {
+  return (
+    <div className="fyt-grid-3">
+      {Array.from({ length: count }, (_, i) => (
+        <TurfCardSkeleton key={i} />
+      ))}
+    </div>
   );
 }

@@ -528,7 +528,14 @@ export default function Checkout() {
 
               <div className="fyt-receipt-card">
                 <div className="fyt-receipt-header">
-                  <img src={turfImage} alt={turf.name} className="fyt-receipt-thumb" />
+                  <img
+                    src={turfImage}
+                    alt={turf.name}
+                    className="fyt-receipt-thumb"
+                    onError={(event) => {
+                      event.currentTarget.src = "/cricket-turf.jpg";
+                    }}
+                  />
                   <div>
                     <h3 className="fyt-receipt-turf-name">{turf.name}</h3>
                     <div className="fyt-receipt-loc">
@@ -1184,7 +1191,7 @@ export default function Checkout() {
 
                 <div className="fyt-checkout-guarantees">
                   <div className="fyt-cg-item"><ShieldCheck size={16} /> <span>Slot &amp; add-ons held on payment · No double booking</span></div>
-                  <div className="fyt-cg-item"><Check size={16} /> <span>Free cancellation up to 4 hrs before play</span></div>
+                  <div className="fyt-cg-item"><Check size={16} /> <span>Cancel online up to 2 hrs before play</span></div>
                 </div>
               </div>
             </div>

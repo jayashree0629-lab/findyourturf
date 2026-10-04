@@ -30,10 +30,12 @@ import {
 } from "lucide-react";
 
 import "./App.css";
+import "./ui.css";
 import { getEvent, getEvents, getTournament } from "./services/api";
 import { socket } from "./services/socket";
 import { getEventImage } from "./utils/sportsImages";
 import { isVisitorRegistered, getIdentity } from "./services/profile";
+import { isRegistrationOpen, registrationClosedLabel } from "./utils/registration";
 
 // Components
 import Navbar from "./components/Navbar";
@@ -60,6 +62,7 @@ import Community from "./pages/Community";
 import AutoTeams from "./pages/AutoTeams";
 import Rewards from "./pages/Rewards";
 import ZonePage from "./pages/ZonePage";
+import HelpCenter from "./pages/HelpCenter";
 
 // Banners
 import banner1 from "./assets/banners/promo_tournaments_1788516995082.jpg";
@@ -218,7 +221,7 @@ function HeroSection() {
                 className="fyt-hero-main-img"
               />
               <div className="fyt-hero-img-gradient" />
-              
+
               <div className="fyt-hero-floating-badge">
                 <div className="fyt-hfb-icon">⚽</div>
                 <div>
@@ -282,6 +285,41 @@ function QuickActions() {
   );
 }
 
+function MoreSection() {
+  const navigate = useNavigate();
+  const sections = [
+    { title: "My Bookings", detail: "View, share or cancel your games", icon: Ticket, to: "/bookings" },
+    { title: "Rewards", detail: "Earn points and unlock coupons", icon: Gift, to: "/rewards" },
+    { title: "Community", detail: "Posts, tips and match results", icon: Newspaper, to: "/community" },
+    { title: "Your Zone", detail: "Student & Corporate offers", icon: GraduationCap, to: "/zones/student" },
+  ];
+
+  return (
+    <section className="fyt-section">
+      <div className="fyt-container">
+        <div className="fyt-section-header-row">
+          <div>
+            <span className="fyt-section-kicker">MORE FROM FIND YOUR TURF</span>
+            <h2 className="fyt-section-title">Your game hub</h2>
+          </div>
+        </div>
+        <div className="fyt-x-more-grid">
+          {sections.map(({ title, detail, icon: Icon, to }) => (
+            <button key={title} className="fyt-x-more-card" onClick={() => navigate(to)}>
+              <span className="fyt-x-more-icon"><Icon size={22} /></span>
+              <span style={{ flex: 1 }}>
+                <strong>{title}</strong>
+                <em>{detail}</em>
+              </span>
+              <ChevronRight size={16} color="var(--text-muted)" />
+            </button>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function FeaturedTournamentAd() {
   const { events, loading } = useEvents();
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -316,6 +354,9 @@ function FeaturedTournamentAd() {
             src={slides[currentSlide].image}
             alt={tournament.eventName}
             className="fyt-promo-bg"
+            onError={(e) => {
+              e.currentTarget.src = "/cricket-turf.jpg";
+            }}
           />
           <div className="fyt-promo-scrim" />
           <div className="fyt-promo-content">
@@ -405,53 +446,19 @@ function EventCard({ event, index = 0 }) {
             <button
               type="button"
               className="fyt-inline-register-btn"
+              disabled={!isRegistrationOpen(event.status)}
               onClick={(e) => {
                 e.stopPropagation();
                 window.open(REGISTRATION_FORM_URL, "_blank", "noopener,noreferrer");
               }}
             >
-              Register
+              {isRegistrationOpen(event.status) ? "Register" : registrationClosedLabel(event.status)}
             </button>
-            <ArrowRight size={14} />
+            {isRegistrationOpen(event.status) && <ArrowRight size={14} />}
           </div>
         </div>
       </div>
     </article>
-  );
-}
-
-function MoreSection() {
-  const navigate = useNavigate();
-  const sections = [
-    { title: "My Bookings", detail: "View, share or cancel your games", icon: Ticket, to: "/bookings" },
-    { title: "Rewards", detail: "Earn points and unlock coupons", icon: Gift, to: "/rewards" },
-    { title: "Community", detail: "Posts, tips and match results", icon: Newspaper, to: "/community" },
-    { title: "Your Zone", detail: "Student & Corporate offers", icon: GraduationCap, to: "/zones/student" },
-  ];
-
-  return (
-    <section className="fyt-section">
-      <div className="fyt-container">
-        <div className="fyt-section-header-row">
-          <div>
-            <span className="fyt-section-kicker">MORE FROM FIND YOUR TURF</span>
-            <h2 className="fyt-section-title">Your game hub</h2>
-          </div>
-        </div>
-        <div className="fyt-x-more-grid">
-          {sections.map(({ title, detail, icon: Icon, to }) => (
-            <button key={title} className="fyt-x-more-card" onClick={() => navigate(to)}>
-              <span className="fyt-x-more-icon"><Icon size={22} /></span>
-              <span style={{ flex: 1 }}>
-                <strong>{title}</strong>
-                <em>{detail}</em>
-              </span>
-              <ChevronRight size={16} color="var(--text-muted)" />
-            </button>
-          ))}
-        </div>
-      </div>
-    </section>
   );
 }
 
@@ -516,7 +523,7 @@ function Home() {
         {/* 4. Admin-published one-day championship */}
         <UpcomingTournamentsSection />
 
-        {/* 6. Sport Categories Explorer */}
+        {/* 5. Sport Categories Explorer */}
         <section className="fyt-section">
           <div className="fyt-container">
             <div className="fyt-section-header-row">
@@ -668,7 +675,14 @@ function TournamentDetails() {
 
           {/* Tournament Hero Card */}
           <div className="fyt-tourney-hero-card">
-            <img src={displayImage} alt={event.eventName} className="fyt-thc-img" />
+            <img
+              src={displayImage}
+              alt={event.eventName}
+              className="fyt-thc-img"
+              onError={(e) => {
+                e.currentTarget.src = "/cricket-turf.jpg";
+              }}
+            />
             <div className="fyt-thc-scrim" />
             <div className="fyt-thc-body">
               <div className="fyt-thc-badge-row">
@@ -847,13 +861,20 @@ function TournamentDetails() {
             </div>
 
             {/* Registration Notice Banner */}
-            <div className="fyt-tourney-notice-banner fyt-tourney-notice-active" style={{ marginTop: 24 }}>
+            <div
+              className={`fyt-tourney-notice-banner ${isRegistrationOpen(event.status) ? "fyt-tourney-notice-active" : "fyt-tourney-notice-closed"}`}
+              style={{ marginTop: 24 }}
+            >
               <div className="fyt-tnb-icon">
                 <ShieldCheck size={16} />
               </div>
               <div className="fyt-tnb-text">
-                <strong>{event.status || "REGISTRATION OPEN"}</strong>
-                <span>Complete the official Google Form to register your team.</span>
+                <strong>{isRegistrationOpen(event.status) ? (event.status || "REGISTRATION OPEN") : registrationClosedLabel(event.status)}</strong>
+                <span>
+                  {isRegistrationOpen(event.status)
+                    ? "Complete the official Google Form to register your team."
+                    : "This tournament is no longer accepting new registrations."}
+                </span>
               </div>
             </div>
 
@@ -862,10 +883,11 @@ function TournamentDetails() {
               <button
                 type="button"
                 className="fyt-btn-primary fyt-btn-register"
+                disabled={!isRegistrationOpen(event.status)}
                 onClick={() => window.open("https://docs.google.com/forms/d/e/1FAIpQLScxnTEoxYDsNd24k4q-mniTvw3c9gpMUzwbNRoiTaqebZk4ig/viewform", "_blank", "noopener,noreferrer")}
               >
                 <ExternalLink size={16} />
-                <span>Register Now</span>
+                <span>{isRegistrationOpen(event.status) ? "Register Now" : registrationClosedLabel(event.status)}</span>
               </button>
             </div>
           </div>
@@ -943,6 +965,7 @@ function App() {
       <Route path="/teams" element={<AutoTeams />} />
       <Route path="/rewards" element={<Rewards />} />
       <Route path="/zones/:zone" element={<ZonePage />} />
+      <Route path="/help" element={<HelpCenter />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

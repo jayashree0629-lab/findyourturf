@@ -1,334 +1,171 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  User,
-  Phone,
-  Mail,
-  Calendar,
-  MapPin,
   Pencil,
-  LogOut,
-  Clock,
-  Sparkles,
-  ArrowRight,
-  ShieldCheck,
-  CheckCircle2,
   Ticket,
   Gift,
   Users,
   Newspaper,
   GraduationCap,
   Building2,
+  LifeBuoy,
+  LogOut,
+  ChevronRight,
+  Check,
 } from "lucide-react";
-import {
-  getProfile,
-  saveProfile,
-  clearProfile,
-  getLocalBookings,
-} from "../services/profile";
-import Navbar from "../components/Navbar";
+import { getProfile, saveProfile } from "../services/profile";
+import Navbar, { LogoutDialog } from "../components/Navbar";
 import BottomNav from "../components/BottomNav";
-import EmptyState from "../components/EmptyState";
-import { SPORTS_IMAGES } from "../utils/sportsImages";
+import Footer from "../components/Footer";
+
+const LINKS = [
+  { to: "/bookings", label: "My bookings", desc: "Upcoming, past and cancelled games", Icon: Ticket },
+  { to: "/rewards", label: "Rewards & coupons", desc: "Your points and discount codes", Icon: Gift },
+  { to: "/players", label: "Find players", desc: "Host or join a game", Icon: Users },
+  { to: "/community", label: "Community", desc: "Posts, tips and match results", Icon: Newspaper },
+  { to: "/zones/student", label: "Student zone", desc: "Verify your ID for a discount", Icon: GraduationCap },
+  { to: "/zones/corporate", label: "Corporate zone", desc: "Team outings and office leagues", Icon: Building2 },
+  { to: "/help", label: "Help center", desc: "Guides, FAQs and contact", Icon: LifeBuoy },
+];
+
+function initials(name) {
+  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+  return parts.length ? (parts[0][0] + (parts[1] ? parts[1][0] : "")).toUpperCase() : "?";
+}
 
 export default function Profile() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState(() => getProfile());
-  const [editing, setEditing] = useState(() => !getProfile());
-  const [form, setForm] = useState(
-    () => getProfile() || { name: "", phone: "", email: "" }
-  );
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState(() => getProfile() || { name: "", phone: "", email: "" });
   const [error, setError] = useState("");
-  const [bookings, setBookings] = useState(() => getLocalBookings());
+  const [saved, setSaved] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
 
-  useEffect(() => {
-    setBookings(getLocalBookings());
-  }, []);
+  const set = (k) => (e) =>
+    setForm((f) => ({ ...f, [k]: k === "phone" ? e.target.value.replace(/\D/g, "").slice(0, 10) : e.target.value }));
 
-  const handleChange = (e) =>
-    setForm({ ...form, [e.target.name]: e.target.value });
-
-  const handleSave = (e) => {
+  const save = (e) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.phone.trim()) {
-      setError("Full name and mobile number are required.");
-      return;
+    if (!form.name.trim()) return setError("Please enter your name.");
+    if (!/^[6-9]\d{9}$/.test(form.phone)) return setError("Enter a valid 10-digit mobile number.");
+    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      return setError("Enter a valid email address or leave it blank.");
     }
-    if (!/^\d{10}$/.test(form.phone.trim())) {
-      setError("Please enter a valid 10-digit mobile number.");
-      return;
-    }
-    const saved = saveProfile({
-      name: form.name.trim(),
-      phone: form.phone.trim(),
-      email: form.email.trim(),
-    });
-    setProfile(saved);
+    const next = saveProfile({ name: form.name.trim(), phone: form.phone, email: form.email.trim() });
+    setProfile(next);
     setEditing(false);
     setError("");
-  };
-
-  const handleSignOut = () => {
-    if (window.confirm("Are you sure you want to clear your stored player profile on this device?")) {
-      clearProfile();
-      setProfile(null);
-      setForm({ name: "", phone: "", email: "" });
-      setEditing(true);
-    }
+    setSaved(true);
+    window.dispatchEvent(new Event("storage"));
+    setTimeout(() => setSaved(false), 3000);
+    return undefined;
   };
 
   return (
     <div className="fyt-app-shell">
       <Navbar />
+      <main className="ui-page-main">
+        <div className="ui-container" style={{ maxWidth: 980 }}>
+          <div className="ui-pagehead"><h1>Account</h1></div>
 
-      <main className="fyt-main-content" style={{ paddingBottom: 110 }}>
-        <div className="fyt-container" style={{ maxWidth: 860 }}>
-          {/* Profile Hero Card */}
-          <div className="fyt-card fyt-profile-hero-card">
-            <div className="fyt-ph-left">
-              <div className="fyt-ph-avatar">
-                {profile?.name ? profile.name.charAt(0).toUpperCase() : <User size={32} />}
-              </div>
-              <div className="fyt-ph-info">
-                <div className="fyt-ph-badge">
-                  <Sparkles size={12} /> <span>Turf Player</span>
-                </div>
-                <h1 className="fyt-ph-name">{profile?.name || "Guest Player"}</h1>
-                <p className="fyt-ph-contact">
-                  {profile?.phone ? `+91 ${profile.phone}` : "Set up your player profile to book slots faster"}
-                </p>
-              </div>
+          <div className="ui-profile-head">
+            <span className="ui-avatar">{initials(profile?.name)}</span>
+            <div className="grow">
+              <h1>{profile?.name || "Guest player"}</h1>
+              <p>
+                {profile?.phone ? `+91 ${profile.phone}` : "Add your details to book faster"}
+                {profile?.email ? ` · ${profile.email}` : ""}
+              </p>
             </div>
-
-            {!editing && profile && (
+            {!editing && (
               <button
-                className="fyt-btn-edit-profile"
-                onClick={() => setEditing(true)}
+                className="ui-btn ui-btn-secondary"
+                onClick={() => {
+                  setForm(profile || { name: "", phone: "", email: "" });
+                  setEditing(true);
+                }}
               >
-                <Pencil size={15} />
-                <span>Edit Profile</span>
+                <Pencil size={15} /> Edit details
               </button>
             )}
           </div>
 
-          {/* Profile Form (if editing) or Details Summary */}
-          {editing ? (
-            <div className="fyt-card fyt-profile-form-card" style={{ marginTop: 20 }}>
-              <h3 className="fyt-card-heading">
-                {profile ? "Edit Player Details" : "Create Player Profile"}
-              </h3>
-              <form onSubmit={handleSave} className="fyt-profile-form">
-                <div className="fyt-form-group">
-                  <label>Full Name *</label>
-                  <div className="fyt-input-with-icon">
-                    <User size={16} />
-                    <input
-                      name="name"
-                      value={form.name}
-                      onChange={handleChange}
-                      placeholder="e.g. Karthik Raj"
-                      required
-                    />
+          {saved && (
+            <div className="ui-alert success" style={{ marginTop: 16 }} role="status">
+              <Check size={14} style={{ verticalAlign: "-2px" }} /> Your details were updated.
+            </div>
+          )}
+
+          <div className="ui-cols-2" style={{ marginTop: 20 }}>
+            <section className="ui-panel">
+              <h3>Personal details</h3>
+              {editing ? (
+                <form onSubmit={save} noValidate>
+                  <div className="ui-field">
+                    <label htmlFor="pf-name">Full name</label>
+                    <input id="pf-name" className="ui-input" value={form.name} onChange={set("name")} autoComplete="name" />
                   </div>
-                </div>
-
-                <div className="fyt-form-group">
-                  <label>Mobile Number *</label>
-                  <div className="fyt-input-with-icon">
-                    <Phone size={16} />
-                    <input
-                      name="phone"
-                      value={form.phone}
-                      onChange={handleChange}
-                      placeholder="10-digit phone number"
-                      inputMode="numeric"
-                      required
-                    />
+                  <div className="ui-field">
+                    <label htmlFor="pf-phone">Mobile number</label>
+                    <div className="ui-phone">
+                      <span className="pre">+91</span>
+                      <input id="pf-phone" className="ui-input" value={form.phone} onChange={set("phone")} inputMode="numeric" />
+                    </div>
+                    <div className="hint">Your bookings and rewards are linked to this number.</div>
                   </div>
-                </div>
-
-                <div className="fyt-form-group">
-                  <label>Email Address (Optional)</label>
-                  <div className="fyt-input-with-icon">
-                    <Mail size={16} />
-                    <input
-                      name="email"
-                      value={form.email}
-                      onChange={handleChange}
-                      placeholder="e.g. karthik@example.com"
-                    />
+                  <div className="ui-field">
+                    <label htmlFor="pf-email">
+                      Email <span style={{ color: "#94A3B8", fontWeight: 500 }}>(optional)</span>
+                    </label>
+                    <input id="pf-email" className="ui-input" type="email" value={form.email} onChange={set("email")} placeholder="name@example.com" />
                   </div>
-                </div>
-
-                {error && <div className="fyt-error-banner">{error}</div>}
-
-                <div className="fyt-form-actions-row">
-                  <button type="submit" className="fyt-btn-primary">
-                    Save Profile
-                  </button>
-                  {profile && (
-                    <button
-                      type="button"
-                      className="fyt-btn-secondary"
-                      onClick={() => {
-                        setForm(profile);
-                        setEditing(false);
-                        setError("");
-                      }}
-                    >
+                  {error && <div className="ui-alert error" role="alert">{error}</div>}
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <button type="submit" className="ui-btn ui-btn-primary">Save changes</button>
+                    <button type="button" className="ui-btn ui-btn-secondary" onClick={() => { setEditing(false); setError(""); }}>
                       Cancel
                     </button>
-                  )}
-                </div>
-              </form>
-            </div>
-          ) : (
-            <div className="fyt-card fyt-profile-details-card" style={{ marginTop: 20 }}>
-              <h3 className="fyt-card-heading">Contact Information</h3>
-              <div className="fyt-pd-grid">
-                <div className="fyt-pd-item">
-                  <span className="fyt-pd-label"><Phone size={14} /> Phone Number</span>
-                  <strong className="fyt-pd-val">+91 {profile.phone}</strong>
-                </div>
-
-                {profile.email && (
-                  <div className="fyt-pd-item">
-                    <span className="fyt-pd-label"><Mail size={14} /> Email</span>
-                    <strong className="fyt-pd-val">{profile.email}</strong>
                   </div>
-                )}
-              </div>
-            </div>
-          )}
+                </form>
+              ) : (
+                <dl style={{ display: "grid", gap: 16, margin: 0 }}>
+                  {[
+                    ["Name", profile?.name],
+                    ["Mobile number", profile?.phone ? `+91 ${profile.phone}` : ""],
+                    ["Email", profile?.email],
+                  ].map(([k, v]) => (
+                    <div key={k}>
+                      <dt style={{ fontSize: 12.5, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: ".05em" }}>{k}</dt>
+                      <dd style={{ margin: "2px 0 0", fontSize: 16, fontWeight: 600 }}>
+                        {v || <span style={{ color: "#94A3B8", fontWeight: 500 }}>Not added</span>}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </section>
 
-          {/* Quick links to everything else the app does */}
-          <section style={{ marginTop: 24 }}>
-            <div className="fyt-x-links">
-              {[
-                { to: "/bookings", label: "My Bookings", hint: "Manage or cancel", Icon: Ticket },
-                { to: "/rewards", label: "Rewards", hint: "Points & coupons", Icon: Gift },
-                { to: "/players", label: "Find Players", hint: "Join or host a game", Icon: Users },
-                { to: "/community", label: "Community", hint: "Posts & chat", Icon: Newspaper },
-                { to: "/zones/student", label: "Student Zone", hint: "Student discounts", Icon: GraduationCap },
-                { to: "/zones/corporate", label: "Corporate Zone", hint: "Team events", Icon: Building2 },
-              ].map(({ to, label, hint, Icon }) => (
-                <button key={to} className="fyt-x-link-tile" onClick={() => navigate(to)}>
-                  <Icon size={20} />
-                  <span>{label}</span>
-                  <small>{hint}</small>
+            <section className="ui-panel">
+              <h3>Quick links</h3>
+              {LINKS.map(({ to, label, desc, Icon }) => (
+                <button key={to} className="ui-list-item" onClick={() => navigate(to)}>
+                  <span className="ico"><Icon size={19} /></span>
+                  <span><b>{label}</b><span className="d">{desc}</span></span>
+                  <ChevronRight size={18} className="chev" />
                 </button>
               ))}
-            </div>
-          </section>
-
-          {/* Bookings History Section */}
-          <section className="fyt-my-bookings-section" style={{ marginTop: 28 }}>
-            <div className="fyt-section-header-row">
-              <h2 className="fyt-section-title">Recent Bookings</h2>
-              <button className="fyt-x-btn-ghost" onClick={() => navigate("/bookings")}>
-                Manage all bookings →
+              <button className="ui-list-item danger" onClick={() => setConfirmLogout(true)}>
+                <span className="ico"><LogOut size={19} /></span>
+                <span><b>Log out</b><span className="d">Sign out on this device</span></span>
               </button>
-            </div>
-
-            {bookings.length === 0 ? (
-              <EmptyState
-                type="bookings"
-                title="No turf bookings yet"
-                message="You haven't reserved any turf slots yet. Explore venues in Coimbatore and book your first game!"
-                actionLabel="Explore & Book Turfs"
-                onAction={() => navigate("/turfs")}
-              />
-            ) : (
-              <div className="fyt-bookings-list">
-                {bookings.map((booking, idx) => (
-                  <div key={idx} className="fyt-card fyt-booking-history-card">
-                    <div className="fyt-bhc-header">
-                      <div className="fyt-bhc-title-group">
-                        <h3 className="fyt-bhc-turf-name">{booking.turfName}</h3>
-                        {booking.turfLocation && (
-                          <div className="fyt-bhc-loc">
-                            <MapPin size={13} /> <span>{booking.turfLocation}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      <span className={`fyt-status-badge ${booking.status?.toLowerCase() || "confirmed"}`}>
-                        <CheckCircle2 size={12} /> {booking.status || "Confirmed"}
-                      </span>
-                    </div>
-
-                    <div className="fyt-bhc-divider" />
-
-                    <div className="fyt-bhc-meta-row">
-                      <div className="fyt-bhc-meta-item">
-                        <Calendar size={14} className="fyt-meta-icon" />
-                        <span>
-                          {booking.date
-                            ? new Date(booking.date).toLocaleDateString("en-IN", {
-                                weekday: "short",
-                                day: "numeric",
-                                month: "short",
-                                year: "numeric",
-                              })
-                            : "-"}
-                        </span>
-                      </div>
-
-                      <div className="fyt-bhc-meta-item">
-                        <Clock size={14} className="fyt-meta-icon" />
-                        <span>
-                          {booking.endSlot
-                            ? `${booking.slot} – ${booking.endSlot}`
-                            : booking.slot}
-                        </span>
-                      </div>
-
-                      <div className="fyt-bhc-amount">
-                        <span>Paid:</span>
-                        <strong>₹{booking.totalAmount}</strong>
-                      </div>
-                    </div>
-
-                    {(booking.players > 1 || booking.perPersonAmount) && (
-                      <div
-                        className="fyt-bhc-split-row"
-                        style={{
-                          marginTop: 10,
-                          paddingTop: 10,
-                          borderTop: "1px dashed var(--border-color, #e5e7eb)",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          fontSize: "0.85rem",
-                          color: "var(--text-secondary)",
-                        }}
-                      >
-                        <span>
-                          Split {booking.players || 1} ways
-                          {booking.floodlightAmount ? " · incl. floodlight" : ""}
-                        </span>
-                        <strong style={{ color: "var(--primary)" }}>
-                          ₹{booking.perPersonAmount} / person
-                        </strong>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          {/* Sign Out / Reset Button */}
-          {profile && (
-            <div style={{ marginTop: 32, textAlign: "center" }}>
-              <button className="fyt-btn-signout" onClick={handleSignOut}>
-                <LogOut size={16} /> <span>Clear Stored Details</span>
-              </button>
-            </div>
-          )}
+            </section>
+          </div>
         </div>
       </main>
-
+      <Footer />
       <BottomNav />
+      {confirmLogout && <LogoutDialog onCancel={() => setConfirmLogout(false)} />}
     </div>
   );
 }
