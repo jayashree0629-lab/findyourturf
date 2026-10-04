@@ -4,6 +4,14 @@ const Event = require("../models/Event");
 
 const router = express.Router();
 
+// Statuses that close registration. Anything else (including the legacy
+// "Active" value and the default "Upcoming") keeps registration open.
+const REGISTRATION_CLOSED_STATUSES = ["Ongoing", "Completed", "Cancelled"];
+
+function isRegistrationOpen(status) {
+    return !REGISTRATION_CLOSED_STATUSES.includes(status);
+}
+
 
 // ==========================================
 // CREATE REGISTRATION
@@ -20,6 +28,13 @@ router.post("/", async (req, res) => {
             return res.status(404).json({
                 success: false,
                 message: "Event not found"
+            });
+        }
+
+        if (!isRegistrationOpen(existingEvent.status)) {
+            return res.status(403).json({
+                success: false,
+                message: "Registration is closed for this tournament."
             });
         }
 

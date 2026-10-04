@@ -58,6 +58,12 @@ const inningsScoreSchema = new mongoose.Schema({
   wickets: { type: Number, default: 0 },
   legalBalls: { type: Number, default: 0 }, // For overs calculation
   extras: { type: Number, default: 0 },
+  // Extras split by type (runs). Lives in the innings so the BallEvent
+  // snapshot / undo restores it with everything else.
+  wides: { type: Number, default: 0 },
+  noBalls: { type: Number, default: 0 },
+  byes: { type: Number, default: 0 },
+  legByes: { type: Number, default: 0 },
   batting: { type: [batterStatSchema], default: [] },
   bowling: { type: [bowlerStatSchema], default: [] },
   fallOfWickets: { type: [fallOfWicketSchema], default: [] },

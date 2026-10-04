@@ -107,6 +107,9 @@ const io = new Server(server, {
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 
+// Student ID-card photos are sent as compressed data URLs, so this one router
+// accepts a larger body. Must come before the global (small) JSON parser.
+app.use("/api/zones", express.json({ limit: "1mb" }));
 app.use(express.json());
 
 app.set("io", io);
@@ -161,6 +164,10 @@ app.use("/api/rewards", rewardsRouter);
 const insightsRoutes = require("./routes/insightsRoutes");
 app.use("/api/insights", insightsRoutes);
 
+const { adminRouter: ownerAdminRoutes, portalRouter: ownerPortalRoutes } = require("./routes/ownerRoutes");
+app.use("/api/owners", ownerAdminRoutes);
+app.use("/api/owner-portal", ownerPortalRoutes);
+
 const tournamentRoutes = require("./routes/tournamentRoutes");
 app.use("/api/tournaments", tournamentRoutes);
 
@@ -191,6 +198,10 @@ app.use((err, req, res, next) => {
       success: false,
       message: "This origin is not allowed to access the API. Add it to CLIENT_ORIGINS."
     });
+  }
+
+  if (err.type === "entity.too.large") {
+    return res.status(413).json({ success: false, message: "That upload is too large. Please use a smaller photo." });
   }
 
   console.error("Unhandled error:", err.message);

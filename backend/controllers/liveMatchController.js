@@ -157,7 +157,7 @@ function buildDismissalText(type, bowlerName, fielderName) {
   switch (type) {
     case "Bowled": return b ? `b ${b}` : "bowled";
     case "LBW": return b ? `lbw b ${b}` : "lbw";
-    case "Caught": return `c ${f || "fielder"}${b ? ` b ${b}` : ""}`;
+    case "Caught": return f ? `c ${f}${b ? ` b ${b}` : ""}` : b ? `c & b ${b}` : "caught";
     case "Stumped": return `st ${f || "keeper"}${b ? ` b ${b}` : ""}`;
     case "Hit Wicket": return b ? `hit wicket b ${b}` : "hit wicket";
     case "Run Out": return f ? `run out (${f})` : "run out";
@@ -184,8 +184,11 @@ function snapshotInnings(teamName, innings) {
     return {
       playerName: w.name || "",
       overs: oversDisplay(balls),
+      maidens: w.maidens || 0,
       runs: w.runsConceded || 0,
       wickets: w.wickets || 0,
+      noBalls: w.noBalls || 0,
+      wides: w.wides || 0,
       economy: oversNum > 0 ? ((w.runsConceded || 0) / oversNum).toFixed(2) : "0.00",
     };
   });
@@ -201,10 +204,138 @@ function snapshotInnings(teamName, innings) {
     wickets: innings?.wickets || 0,
     oversDisplay: oversDisplay(legalBalls),
     extras: innings?.extras || 0,
+    extrasBreakdown: {
+      wides: innings?.wides || 0,
+      noBalls: innings?.noBalls || 0,
+      byes: innings?.byes || 0,
+      legByes: innings?.legByes || 0,
+    },
     batting,
     bowling,
     fallOfWickets,
   };
+}
+
+// Display symbol for one delivery ("•", "4", "W", "2+W", "Wd", "Wd2", "Nb",
+// "Nb1", "1B", "2Lb"). Used for the live "this over" strip and over history.
+function ballSymbolFor({ isWicket, batRuns = 0, extraType = null, extraRuns = 0 }) {
+  if (isWicket) return batRuns > 0 ? `${batRuns}+W` : "W";
+  if (extraType === "WD") return extraRuns > 1 ? `Wd${extraRuns}` : "Wd";
+  if (extraType === "NB") return batRuns > 0 ? `Nb${batRuns}` : "Nb";
+  if (extraType === "B") return `${extraRuns}B`;
+  if (extraType === "LB") return `${extraRuns}Lb`;
+  return batRuns === 0 ? "•" : String(batRuns);
+}
+
+// A maiden: a full over in which the bowler conceded nothing. Byes / leg-byes
+// are not charged to the bowler, so they do not spoil a maiden; wides, no-balls
+// and runs off the bat do.
+function isMaidenStrip(strip = []) {
+  if (!strip.length) return false;
+  return strip.every((sym) => sym === "•" || sym === "W" || /^\d+B$/.test(sym) || /^\d+Lb$/.test(sym));
+}
+
+// Per-over history built from the recorded deliveries: one row per over with
+// its balls, runs, wickets and bowler. `complete` is true once 6 legal balls
+// were bowled.
+function buildOverSummaries(match, ballEvents = []) {
+  const bowlerNameFor = (innings, id) => {
+    if (!id) return "";
+    const key = innings === 2 ? "secondInnings" : "firstInnings";
+    const row = (match.score?.[key]?.bowling || []).find((b) => String(b.playerId) === String(id));
+    if (row?.name) return row.name;
+    return (
+      rosterPlayerName(match, "Team A", id, "") ||
+      rosterPlayerName(match, "Team B", id, "")
+    );
+  };
+
+  const groups = new Map();
+  for (const ball of ballEvents) {
+    const key = `${ball.innings}-${ball.overNumber}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        innings: ball.innings,
+        over: ball.overNumber + 1,
+        bowler: bowlerNameFor(ball.innings, ball.bowlerId),
+        balls: [],
+        runs: 0,
+        wickets: 0,
+        legalBalls: 0,
+      });
+    }
+    const g = groups.get(key);
+    const extraType = ball.extras?.type || null;
+    const extraRuns = ball.extras?.runs || 0;
+    g.balls.push(
+      ballSymbolFor({ isWicket: ball.isWicket, batRuns: ball.runsOffBat || 0, extraType, extraRuns })
+    );
+    g.runs += (ball.runsOffBat || 0) + extraRuns;
+    if (ball.isWicket) g.wickets += 1;
+    if (ball.isLegalDelivery) g.legalBalls += 1;
+    if (!g.bowler) g.bowler = bowlerNameFor(ball.innings, ball.bowlerId);
+  }
+
+  return Array.from(groups.values()).map((g) => ({
+    innings: g.innings,
+    over: g.over,
+    bowler: g.bowler,
+    balls: g.balls,
+    runs: g.runs,
+    wickets: g.wickets,
+    complete: g.legalBalls >= 6,
+  }));
+}
+
+// Closes the innings that just ended (all out / overs done / ended by the
+// scorer): innings 1 -> innings break with a target, innings 2 -> result.
+function applyInningsEnd(match, inningsScore) {
+  const nameFor = (slot) => teamNameFor(match, slot);
+
+  if (match.state.currentInnings === 1) {
+    match.state.status = "INNINGS_BREAK";
+    match.state.currentInnings = 2;
+    match.target = inningsScore.runs + 1;
+    const prevBatting = match.state.battingTeamId;
+    match.state.battingTeamId = match.state.bowlingTeamId;
+    match.state.bowlingTeamId = prevBatting;
+    // Reset the crease for the second innings.
+    match.state.strikerId = null;
+    match.state.nonStrikerId = null;
+    match.state.bowlerId = null;
+    match.state.thisOver = [];
+    match.state.lastBallText = "";
+    match.state.awaitingNewBatter = false;
+    match.state.awaitingNewBowler = false;
+    return;
+  }
+
+  match.state.status = "COMPLETED";
+  if (inningsScore.runs >= match.target) {
+    match.winner = nameFor(match.state.battingTeamId);
+    match.resultText = `${match.winner} won by ${Math.max(0, 10 - inningsScore.wickets)} wickets`;
+  } else if (inningsScore.runs === match.target - 1) {
+    match.winner = "Tie";
+    match.resultText = "Match Tied";
+  } else {
+    match.winner = nameFor(match.state.bowlingTeamId);
+    match.resultText = `${match.winner} won by ${match.target - 1 - inningsScore.runs} runs`;
+  }
+}
+
+// When a match finishes, archive it so it shows on the user "Result" tab and
+// the admin "Completed" list.
+async function archiveIfCompleted(req, match) {
+  if (match.state.status !== "COMPLETED") return;
+  try {
+    const already = await CompletedMatch.findOne({ sourceMatchId: match._id });
+    if (!already) {
+      await archiveCompletedMatch(match);
+      emitToRoom(req, "global", "match:completed", match);
+    }
+  } catch (archiveErr) {
+    console.error("Failed to archive completed match:", archiveErr.message);
+  }
 }
 
 async function archiveCompletedMatch(match) {
@@ -360,7 +491,7 @@ exports.getMatchDetails = async (req, res) => {
     const match = await LiveMatch.findById(req.params.id);
     if (match) {
       const ballEvents = await BallEvent.find({ matchId: match._id }).sort({ sequenceNumber: 1 });
-      return res.json({ success: true, type: "LIVE", match, ballEvents });
+      return res.json({ success: true, type: "LIVE", match, ballEvents, overs: buildOverSummaries(match, ballEvents) });
     }
 
     // Not a live match — the admin "Completed" tab lists archived matches by
@@ -433,6 +564,13 @@ exports.updateMatchState = async (req, res) => {
         }
         return "skip";
       };
+
+      // --- Swap strike (scorer corrects who is on strike) ---
+      if (state.swapStrike === true && match.state.strikerId && match.state.nonStrikerId) {
+        const swap = match.state.strikerId;
+        match.state.strikerId = match.state.nonStrikerId;
+        match.state.nonStrikerId = swap;
+      }
 
       // --- Striker / non-striker selection ---
       for (const [nameKey, idKey] of [
@@ -586,8 +724,12 @@ exports.scoreBall = async (req, res) => {
     
     if (extras) {
       inningsScore.extras += extraRuns;
+      if (extraType === "WD") inningsScore.wides = (inningsScore.wides || 0) + extraRuns;
+      else if (extraType === "NB") inningsScore.noBalls = (inningsScore.noBalls || 0) + extraRuns;
+      else if (extraType === "B") inningsScore.byes = (inningsScore.byes || 0) + extraRuns;
+      else if (extraType === "LB") inningsScore.legByes = (inningsScore.legByes || 0) + extraRuns;
     }
-    
+
     if (ballEvent.isLegalDelivery) {
       inningsScore.legalBalls += 1;
     }
@@ -685,18 +827,22 @@ exports.scoreBall = async (req, res) => {
       match.state.strikerId = match.state.nonStrikerId;
       match.state.nonStrikerId = temp;
     }
-    // `dismissedSlot` is kept for the BallEvent record only — the basic team
-    // console just counts the wicket and never blocks for a replacement.
+
+    // A dismissed batter leaves the crease: free their slot (after any strike
+    // rotation above, so we clear whichever end they actually ended up at) and
+    // ask the scorer for the incoming batter.
     void dismissedSlot;
+    if (wicketTaken) {
+      const outId = ballEvent.wicket?.dismissedPlayerId ? String(ballEvent.wicket.dismissedPlayerId) : null;
+      if (outId) {
+        if (String(match.state.strikerId || "") === outId) match.state.strikerId = null;
+        else if (String(match.state.nonStrikerId || "") === outId) match.state.nonStrikerId = null;
+        match.state.awaitingNewBatter = true;
+      }
+    }
 
     // --- This-over delivery strip ----------------------------------------
-    let ballSymbol;
-    if (wicketTaken) ballSymbol = batRuns > 0 ? `${batRuns}+W` : "W";
-    else if (extraType === "WD") ballSymbol = extraRuns > 1 ? `Wd${extraRuns}` : "Wd";
-    else if (extraType === "NB") ballSymbol = batRuns > 0 ? `Nb${batRuns}` : "Nb";
-    else if (extraType === "B") ballSymbol = `${extraRuns}B`;
-    else if (extraType === "LB") ballSymbol = `${extraRuns}Lb`;
-    else ballSymbol = batRuns === 0 ? "•" : String(batRuns);
+    const ballSymbol = ballSymbolFor({ isWicket: wicketTaken, batRuns, extraType, extraRuns });
 
     if (!Array.isArray(match.state.thisOver)) match.state.thisOver = [];
     // Start a fresh strip once the previous over was fully bowled.
@@ -705,42 +851,18 @@ exports.scoreBall = async (req, res) => {
     match.state.thisOver.push(ballSymbol);
     match.state.lastBallText = ballSymbol;
 
+    // Over finished: credit a maiden and ask for the next bowler.
+    if (overComplete) {
+      if (bowlerRow && isMaidenStrip(match.state.thisOver)) bowlerRow.maidens = (bowlerRow.maidens || 0) + 1;
+      match.state.awaitingNewBowler = true;
+    }
+
     // Resolve "Team A"/"Team B" slots to actual team names for results.
-    const nameFor = (slot) => {
-      const t = slot === "Team A" ? match.teamA : slot === "Team B" ? match.teamB : null;
-      return t?.name || t?.shortName || slot || "Team";
-    };
+    const nameFor = (slot) => teamNameFor(match, slot);
 
     // Check if innings over
     if (inningsScore.wickets >= 10 || inningsScore.legalBalls >= (match.overs * 6)) {
-      if (match.state.currentInnings === 1) {
-        match.state.status = "INNINGS_BREAK";
-        match.state.currentInnings = 2;
-        match.target = inningsScore.runs + 1;
-        const prevBatting = match.state.battingTeamId;
-        match.state.battingTeamId = match.state.bowlingTeamId;
-        match.state.bowlingTeamId = prevBatting;
-        // Reset the crease for the second innings.
-        match.state.strikerId = null;
-        match.state.nonStrikerId = null;
-        match.state.bowlerId = null;
-        match.state.thisOver = [];
-        match.state.lastBallText = "";
-        match.state.awaitingNewBatter = false;
-        match.state.awaitingNewBowler = false;
-      } else {
-        match.state.status = "COMPLETED";
-        if (inningsScore.runs >= match.target) {
-           match.winner = nameFor(match.state.battingTeamId);
-           match.resultText = `${match.winner} won`;
-        } else if (inningsScore.runs === match.target - 1) {
-           match.winner = "Tie";
-           match.resultText = "Match Tied";
-        } else {
-           match.winner = nameFor(match.state.bowlingTeamId);
-           match.resultText = `${match.winner} won by ${match.target - 1 - inningsScore.runs} runs`;
-        }
-      }
+      applyInningsEnd(match, inningsScore);
     }
 
     // Check if target chased
@@ -755,19 +877,7 @@ exports.scoreBall = async (req, res) => {
       match.state.awaitingNewBowler = false;
     }
 
-    // When the match finishes naturally, archive it to CompletedMatch so it
-    // shows on the user "Result" tab and the admin "Completed" list.
-    if (match.state.status === "COMPLETED") {
-      try {
-        const already = await CompletedMatch.findOne({ sourceMatchId: match._id });
-        if (!already) {
-           await archiveCompletedMatch(match);
-          emitToRoom(req, "global", "match:completed", match);
-        }
-      } catch (archiveErr) {
-        console.error("Failed to archive completed match:", archiveErr.message);
-      }
-    }
+    await archiveIfCompleted(req, match);
 
     // `state` is an inline nested object; array mutations inside it (thisOver)
     // are not auto-tracked by Mongoose, so flag it explicitly.
@@ -812,6 +922,37 @@ exports.undoLastBall = async (req, res) => {
 
     await lastBall.deleteOne();
     await match.save();
+
+    emitToRoom(req, match._id, "match:scoreUpdated", match);
+    emitToRoom(req, "global", "match:scoreUpdated", match);
+
+    res.json({ success: true, match });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// End the current innings early (all the team's batters are done, time is up,
+// or the batting side declared). Innings 1 -> innings break with a target;
+// innings 2 -> the match result is worked out and the match is archived.
+exports.endInnings = async (req, res) => {
+  try {
+    const match = await LiveMatch.findById(req.params.id);
+    if (!match) return res.status(404).json({ success: false, error: "Match not found" });
+
+    if (match.state.status !== "LIVE") {
+      return res.status(400).json({ success: false, error: "Only a live innings can be ended" });
+    }
+
+    const inningsScore =
+      match.state.currentInnings === 1 ? match.score.firstInnings : match.score.secondInnings;
+
+    applyInningsEnd(match, inningsScore);
+
+    match.markModified("state");
+    match.markModified("score");
+    await match.save();
+    await archiveIfCompleted(req, match);
 
     emitToRoom(req, match._id, "match:scoreUpdated", match);
     emitToRoom(req, "global", "match:scoreUpdated", match);
@@ -1071,9 +1212,23 @@ exports.getCompletedMatches = async (req, res) => {
 exports.getMatchScorecard = async (req, res) => {
   try {
     const activeMatch = await LiveMatch.findById(req.params.id);
+
+    // A finished match lingers in LiveMatch next to its archive; show viewers
+    // the archived result instead of a "live" scorecard.
+    if (activeMatch && activeMatch.state?.status === "COMPLETED") {
+      const archived = await CompletedMatch.findOne({ sourceMatchId: activeMatch._id });
+      if (archived) return res.json({ success: true, type: "COMPLETED", match: archived });
+    }
+
     if (activeMatch) {
       const ballEvents = await BallEvent.find({ matchId: activeMatch._id }).sort({ sequenceNumber: 1 });
-      return res.json({ success: true, type: "LIVE", match: activeMatch, ballEvents });
+      return res.json({
+        success: true,
+        type: "LIVE",
+        match: activeMatch,
+        ballEvents,
+        overs: buildOverSummaries(activeMatch, ballEvents),
+      });
     }
     
     const completedMatch = await CompletedMatch.findOne({ sourceMatchId: req.params.id }) || await CompletedMatch.findById(req.params.id);

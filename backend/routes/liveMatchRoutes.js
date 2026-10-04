@@ -10,6 +10,7 @@ router.get("/admin/:id", protect, liveMatchController.getMatchDetails);
 router.post("/:id/state", protect, liveMatchController.updateMatchState);
 router.post("/:id/score", protect, liveMatchController.scoreBall);
 router.post("/:id/undo", protect, liveMatchController.undoLastBall);
+router.post("/:id/end-innings", protect, liveMatchController.endInnings);
 router.post("/:id/complete", protect, liveMatchController.completeMatch);
 router.put("/:id", protect, liveMatchController.updateMatch);
 router.delete("/:id", protect, liveMatchController.deleteMatch);

@@ -8,6 +8,8 @@ const protect = require("../middleware/authMiddleware");
 const { computeBookingPrice, slotStartMs } = require("../utils/turfPricing");
 const { resolveAddons } = require("../utils/addonPricing");
 const { normalisePhone } = require("../utils/phone");
+const { paymentSummary } = require("../utils/payments");
+const { notifyOwner } = require("../utils/ownerNotify");
 const Coupon = require("../models/Coupon");
 const { validateCoupon, consumeCoupon, releaseCoupon } = require("../utils/coupons");
 
@@ -39,6 +41,9 @@ async function applyCancellation(req, booking) {
         bookingDate: booking.bookingDate.toISOString(),
         startTime: booking.startTime
     });
+
+    const turfDoc = await Turf.findById(booking.turf);
+    await notifyOwner("BOOKING_CANCELLED", turfDoc, booking);
 
     return saved;
 }
@@ -232,6 +237,7 @@ router.get("/mine", async (req, res) => {
                 return {
                     ...b.toObject(),
                     addons: byBooking[String(b._id)] || [],
+                    payment: paymentSummary(b),
                     startsAt: start != null ? new Date(start).toISOString() : null,
                     isPast: start != null ? start < now : false,
                     canCancel:
@@ -338,7 +344,7 @@ router.post("/", async (req, res) => {
                 .filter((member) => member && String(member.phone || "").trim())
                 .map((member) => ({
                     name: String(member.name || "").trim(),
-                    phone: String(member.phone).trim(),
+                    phone: normalisePhone(member.phone) || String(member.phone).trim(),
                     gpayNumber: String(member.gpayNumber || "").trim(),
                     sendMethod: member.sendMethod === "gpay" ? "gpay" : "sms",
                     paid: false
@@ -459,40 +465,7 @@ router.post("/", async (req, res) => {
             addons: addonDocs
         });
 
-        // Mark one invited split member as paid. The booking stays Pending until every
-        // invited member has paid, then transitions atomically to Confirmed.
-        router.post("/:id/split-payments", async (req, res) => {
-            try {
-                const phone = String(req.body?.phone || "").trim();
-                if (!phone) return res.status(400).json({ message: "Member phone is required." });
-
-                const booking = await Booking.findById(req.params.id);
-                if (!booking) return res.status(404).json({ message: "Booking not found." });
-                if (booking.paymentPlan !== "split") {
-                    return res.status(400).json({ message: "This booking does not use split payment." });
-                }
-
-                const member = booking.splitMembers.find((entry) => entry.phone === phone);
-                if (!member) return res.status(404).json({ message: "Split member not found." });
-
-                member.paid = true;
-                member.paidAt = new Date();
-                const everyonePaid = booking.splitMembers.length > 0 && booking.splitMembers.every((entry) => entry.paid);
-                booking.splitPaymentStatus = everyonePaid ? "Completed" : "Pending";
-                booking.status = everyonePaid ? "Confirmed" : "Pending";
-                await booking.save();
-
-                emit(req, "booking:split-payment", {
-                    booking: String(booking._id),
-                    phone,
-                    status: booking.status,
-                    splitPaymentStatus: booking.splitPaymentStatus
-                });
-                res.json({ booking });
-            } catch (error) {
-                res.status(500).json({ message: error.message });
-            }
-        });
+        await notifyOwner("NEW_BOOKING", turfDoc, booking);
 
     } catch (error) {
         res.status(500).json({
@@ -512,12 +485,87 @@ router.get("/", protect, async (req, res) => {
             .populate("turf")
             .sort({ createdAt: -1 });
 
-        res.status(200).json(bookings);
+        res.status(200).json(bookings.map((b) => ({ ...b.toObject(), payment: paymentSummary(b) })));
 
     } catch (error) {
         res.status(500).json({
             message: error.message
         });
+    }
+});
+
+
+// ==========================================
+// SPLIT PAYMENTS
+// Marks one invited teammate as paid. The booking stays Pending until every
+// invited member has paid, then becomes Confirmed. The turf owner is told
+// about each payment.
+// ==========================================
+async function recordSplitPayment(req, res, booking, phone) {
+    if (booking.paymentPlan !== "split") {
+        return res.status(400).json({ message: "This booking does not use split payment." });
+    }
+    if (booking.status === "Cancelled") {
+        return res.status(400).json({ message: "This booking was cancelled." });
+    }
+
+    const wanted = normalisePhone(phone) || phone;
+    const member = booking.splitMembers.find(
+        (entry) => entry.phone === phone || (normalisePhone(entry.phone) || entry.phone) === wanted
+    );
+    if (!member) return res.status(404).json({ message: "Split member not found." });
+    if (member.paid) return res.status(400).json({ message: "This member has already paid." });
+
+    member.paid = true;
+    member.paidAt = new Date();
+    const everyonePaid = booking.splitMembers.length > 0 && booking.splitMembers.every((entry) => entry.paid);
+    booking.splitPaymentStatus = everyonePaid ? "Completed" : "Pending";
+    booking.status = everyonePaid ? "Confirmed" : "Pending";
+    await booking.save();
+
+    emit(req, "booking:split-payment", {
+        booking: String(booking._id),
+        phone,
+        status: booking.status,
+        splitPaymentStatus: booking.splitPaymentStatus
+    });
+
+    const turfDoc = await Turf.findById(booking.turf);
+    await notifyOwner("SPLIT_PAYMENT", turfDoc, booking, {
+        memberName: member.name || member.phone,
+        amount: booking.perPersonAmount
+    });
+    if (everyonePaid) await notifyOwner("PAYMENT_COMPLETE", turfDoc, booking);
+
+    return res.json({ booking: { ...booking.toObject(), payment: paymentSummary(booking) } });
+}
+
+router.post("/:id/split-payments", async (req, res) => {
+    try {
+        const phone = normalisePhone(req.body && req.body.phone) || String((req.body && req.body.phone) || "").trim();
+        if (!phone) return res.status(400).json({ message: "Member phone is required." });
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(404).json({ message: "Booking not found." });
+        }
+        const booking = await Booking.findById(req.params.id);
+        if (!booking) return res.status(404).json({ message: "Booking not found." });
+        return await recordSplitPayment(req, res, booking, phone);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// Admin confirms they have received a teammate's share.
+router.put("/:id/split/:phone/paid", protect, async (req, res) => {
+    try {
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(404).json({ message: "Booking not found." });
+        }
+        const booking = await Booking.findById(req.params.id);
+        if (!booking) return res.status(404).json({ message: "Booking not found." });
+        return await recordSplitPayment(req, res, booking, req.params.phone);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
     }
 });
 

@@ -17,6 +17,13 @@ const zoneEnquirySchema = new mongoose.Schema(
         // Corporate: approximate headcount. Student: usually the team size.
         groupSize: { type: Number, default: 1, min: 1, max: 5000 },
         sport: { type: String, default: "", trim: true },
+
+        // Student zone: photo of the college ID card (compressed data URL) and
+        // the number printed on it. The image is never returned in list
+        // queries — admin fetches it on demand.
+        idNumber: { type: String, default: "", trim: true },
+        idProof: { type: String, default: "", select: false },
+        hasIdProof: { type: Boolean, default: false },
         preferredDate: { type: Date, default: null },
         message: { type: String, default: "", trim: true },
 

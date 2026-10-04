@@ -7,6 +7,9 @@ const ZoneEnquiry = require("../models/ZoneEnquiry");
 const ChatMessage = require("../models/ChatMessage");
 const CommunityPost = require("../models/CommunityPost");
 const Coupon = require("../models/Coupon");
+const OwnerNotification = require("../models/OwnerNotification");
+const TurfOwner = require("../models/TurfOwner");
+const { paymentSummary } = require("../utils/payments");
 const protect = require("../middleware/authMiddleware");
 
 const router = express.Router();
@@ -47,7 +50,11 @@ router.get("/summary", protect, async (req, res) => {
             openPlayerRequests,
             messages24h,
             posts,
-            activeCoupons
+            activeCoupons,
+            upcomingDocs,
+            ownerAlertsPending,
+            ownersCount,
+            turfsCount
         ] = await Promise.all([
             Booking.countDocuments(),
             Booking.countDocuments({ ...active, bookingDate: { $gte: todayUTC, $lt: new Date(todayUTC.getTime() + DAY) } }),
@@ -84,8 +91,39 @@ router.get("/summary", protect, async (req, res) => {
             Coupon.countDocuments({
                 active: true,
                 $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }]
-            })
+            }),
+            Booking.find({ ...active, bookingDate: { $gte: todayUTC } })
+                .populate("turf", "name location")
+                .sort({ bookingDate: 1, createdAt: 1 })
+                .limit(200),
+            OwnerNotification.countDocuments({ status: "Pending" }),
+            TurfOwner.countDocuments(),
+            Turf.countDocuments({ status: { $ne: "Inactive" } })
         ]);
+
+        // Money still to collect on upcoming games (split shares not yet paid,
+        // pay-at-venue bookings, unpaid pending bookings).
+        let pendingAmount = 0;
+        let pendingCount = 0;
+        const upcoming = upcomingDocs.map((b) => {
+            const p = paymentSummary(b);
+            if (p.amountPending > 0) {
+                pendingAmount += p.amountPending;
+                pendingCount += 1;
+            }
+            return {
+                _id: b._id,
+                ref: `FYT-${String(b._id).slice(-6).toUpperCase()}`,
+                turfName: b.turf ? b.turf.name : "Removed turf",
+                bookingDate: b.bookingDate,
+                startTime: b.startTime,
+                contactName: b.contactName,
+                contactPhone: b.contactPhone,
+                totalAmount: b.totalAmount,
+                status: b.status,
+                payment: p
+            };
+        });
 
         const byDay = Object.fromEntries(weekAgg.map((d) => [d._id, d]));
         const week = salesDays.map((key) => ({
@@ -113,6 +151,9 @@ router.get("/summary", protect, async (req, res) => {
                 bookings: t.bookings,
                 revenue: t.revenue
             })),
+            pending: { amount: pendingAmount, count: pendingCount },
+            upcoming: upcoming.slice(0, 8),
+            owners: { alertsPending: ownerAlertsPending, turfsWithOwner: ownersCount, activeTurfs: turfsCount },
             visitors: { total: visitorsTotal, thisWeek: visitorsWeek },
             community: { openEnquiries, openPlayerRequests, messages24h, posts, activeCoupons }
         });

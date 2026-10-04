@@ -10,6 +10,20 @@ const router = express.Router();
 const ZONES = ["student", "corporate"];
 const STATUSES = ["New", "In Review", "Approved", "Rejected", "Closed"];
 
+// A compressed JPEG/PNG/WebP photo, sent as a data URL (see the size limit on
+// this router in server.js). Anything else is rejected.
+const MAX_ID_PROOF_CHARS = 900000;
+function readIdProof(value) {
+    const v = String(value || "");
+    if (!v) return "";
+    if (v.length > MAX_ID_PROOF_CHARS || !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(v)) {
+        const err = new Error("Upload a clear photo of your ID card (JPG, PNG or WebP, under 600 KB).");
+        err.status = 400;
+        throw err;
+    }
+    return v;
+}
+
 function toMine(e) {
     return {
         _id: e._id,
@@ -58,6 +72,11 @@ router.post("/enquiries", async (req, res) => {
             });
         }
 
+        const idProof = readIdProof(req.body.idProofImage);
+        if (zone === "student" && !idProof) {
+            return res.status(400).json({ message: "Please upload your college ID card so we can verify you're a student." });
+        }
+
         const preferred = req.body.preferredDate ? new Date(req.body.preferredDate) : null;
 
         const doc = await ZoneEnquiry.create({
@@ -69,6 +88,9 @@ router.post("/enquiries", async (req, res) => {
             detail: cleanText(req.body.detail, 100),
             groupSize: Math.max(1, Math.min(5000, parseInt(req.body.groupSize, 10) || 1)),
             sport: cleanText(req.body.sport, 40),
+            idNumber: cleanText(req.body.idNumber, 40),
+            idProof,
+            hasIdProof: Boolean(idProof),
             preferredDate: preferred && !Number.isNaN(preferred.getTime()) ? preferred : null,
             message: cleanMultiline(req.body.message, 500)
         });
@@ -78,6 +100,7 @@ router.post("/enquiries", async (req, res) => {
 
         res.status(201).json({ enquiry: toMine(doc) });
     } catch (error) {
+        if (error.status) return res.status(error.status).json({ message: error.message });
         console.error("Zone enquiry failed:", error.message);
         res.status(500).json({ message: "Unable to send your request right now." });
     }
@@ -109,6 +132,20 @@ router.get("/enquiries", protect, async (req, res) => {
         res.json({ enquiries: docs });
     } catch (error) {
         res.status(500).json({ message: "Unable to load requests." });
+    }
+});
+
+// The ID card photo, fetched only when an admin opens it.
+router.get("/enquiries/:id/id-proof", protect, async (req, res) => {
+    try {
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(404).json({ message: "Request not found." });
+        }
+        const doc = await ZoneEnquiry.findById(req.params.id).select("+idProof name idNumber organization");
+        if (!doc || !doc.idProof) return res.status(404).json({ message: "No ID card was uploaded." });
+        res.json({ idProof: doc.idProof, name: doc.name, idNumber: doc.idNumber, organization: doc.organization });
+    } catch (error) {
+        res.status(500).json({ message: "Unable to load the ID card." });
     }
 });
 

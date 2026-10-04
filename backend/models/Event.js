@@ -11,7 +11,9 @@ const eventSchema = new mongoose.Schema(
         sport: {
             type: String,
             required: true,
-            enum: ["Football", "Cricket"],
+            // Any sport a turf offers can host an event (Cricket, Football,
+            // Badminton, Box Cricket, ...), so this is free text, not an enum.
+            maxlength: 40,
             trim: true
         },
 
@@ -104,7 +106,9 @@ const eventSchema = new mongoose.Schema(
 
         status: {
             type: String,
-            enum: ["Active", "Upcoming", "Completed", "Cancelled"],
+            // "Active" is kept for backward compatibility with older events —
+            // it is treated the same as "Upcoming" (registration open).
+            enum: ["Active", "Upcoming", "Ongoing", "Completed", "Cancelled"],
             default: "Upcoming"
         },
 

@@ -21,6 +21,11 @@ const visitorSchema = new mongoose.Schema(
             unique: true
         },
 
+        // Set when the player signed in with Google (verified server-side).
+        email: { type: String, default: "", trim: true, lowercase: true },
+        googleId: { type: String, default: "", index: true },
+        picture: { type: String, default: "" },
+
         lastVisitedAt: {
             type: Date,
             default: Date.now

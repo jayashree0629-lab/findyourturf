@@ -1,5 +1,54 @@
 const mongoose = require("mongoose");
 
+// One innings of the archived scorecard. Shared by both innings so the two
+// can never drift apart.
+const fallOfWicketSchema = new mongoose.Schema({
+  wicketNumber: { type: Number },
+  runs: { type: Number, default: 0 },
+  oversDisplay: { type: String, default: "0.0" },
+  playerOutName: { type: String, default: "" },
+});
+
+const battingRowSchema = new mongoose.Schema({
+  playerName: { type: String },
+  runs: { type: Number, default: 0 },
+  balls: { type: Number, default: 0 },
+  fours: { type: Number, default: 0 },
+  sixes: { type: Number, default: 0 },
+  dismissal: { type: String, default: "not out" },
+});
+
+const bowlingRowSchema = new mongoose.Schema({
+  playerName: { type: String },
+  overs: { type: String, default: "0.0" },
+  maidens: { type: Number, default: 0 },
+  runs: { type: Number, default: 0 },
+  wickets: { type: Number, default: 0 },
+  noBalls: { type: Number, default: 0 },
+  wides: { type: Number, default: 0 },
+  economy: { type: String, default: "0.0" },
+});
+
+const inningsCardSchema = new mongoose.Schema(
+  {
+    team: { type: String },
+    runs: { type: Number, default: 0 },
+    wickets: { type: Number, default: 0 },
+    oversDisplay: { type: String, default: "0.0" },
+    extras: { type: Number, default: 0 },
+    extrasBreakdown: {
+      wides: { type: Number, default: 0 },
+      noBalls: { type: Number, default: 0 },
+      byes: { type: Number, default: 0 },
+      legByes: { type: Number, default: 0 },
+    },
+    fallOfWickets: [fallOfWicketSchema],
+    batting: [battingRowSchema],
+    bowling: [bowlingRowSchema],
+  },
+  { _id: false }
+);
+
 const completedMatchSchema = new mongoose.Schema(
   {
     sourceMatchId: { type: mongoose.Schema.Types.ObjectId, ref: "LiveMatch", required: true, unique: true },
@@ -12,7 +61,7 @@ const completedMatchSchema = new mongoose.Schema(
     scheduledAt: { type: Date, required: true },
     startedAt: { type: Date, required: false },
     completedAt: { type: Date, default: Date.now },
-    
+
     teamA: {
       teamId: { type: String },
       nameSnapshot: { type: String },
@@ -27,7 +76,7 @@ const completedMatchSchema = new mongoose.Schema(
         }
       ]
     },
-    
+
     teamB: {
       teamId: { type: String },
       nameSnapshot: { type: String },
@@ -42,88 +91,22 @@ const completedMatchSchema = new mongoose.Schema(
         }
       ]
     },
-    
+
     winner: { type: String, default: null }, // Team name or "Tie"
     resultText: { type: String, default: null },
     toss: {
       wonBy: { type: String },
       decision: { type: String }
     },
-    
+
     status: { type: String, default: "COMPLETED" },
-    
+
     // Storing final scorecards instead of calculating on the fly
     scorecards: {
-      firstInnings: {
-        team: { type: String },
-        runs: { type: Number, default: 0 },
-        wickets: { type: Number, default: 0 },
-        oversDisplay: { type: String, default: "0.0" },
-        extras: { type: Number, default: 0 },
-        fallOfWickets: [
-          {
-            wicketNumber: { type: Number },
-            runs: { type: Number, default: 0 },
-            oversDisplay: { type: String, default: "0.0" },
-            playerOutName: { type: String, default: "" },
-          }
-        ],
-        batting: [
-          {
-            playerName: { type: String },
-            runs: { type: Number, default: 0 },
-            balls: { type: Number, default: 0 },
-            fours: { type: Number, default: 0 },
-            sixes: { type: Number, default: 0 },
-            dismissal: { type: String, default: "not out" }
-          }
-        ],
-        bowling: [
-          {
-            playerName: { type: String },
-            overs: { type: String, default: "0.0" },
-            runs: { type: Number, default: 0 },
-            wickets: { type: Number, default: 0 },
-            economy: { type: String, default: "0.0" }
-          }
-        ]
-      },
-      secondInnings: {
-        team: { type: String },
-        runs: { type: Number, default: 0 },
-        wickets: { type: Number, default: 0 },
-        oversDisplay: { type: String, default: "0.0" },
-        extras: { type: Number, default: 0 },
-        fallOfWickets: [
-          {
-            wicketNumber: { type: Number },
-            runs: { type: Number, default: 0 },
-            oversDisplay: { type: String, default: "0.0" },
-            playerOutName: { type: String, default: "" },
-          }
-        ],
-        batting: [
-          {
-            playerName: { type: String },
-            runs: { type: Number, default: 0 },
-            balls: { type: Number, default: 0 },
-            fours: { type: Number, default: 0 },
-            sixes: { type: Number, default: 0 },
-            dismissal: { type: String, default: "not out" }
-          }
-        ],
-        bowling: [
-          {
-            playerName: { type: String },
-            overs: { type: String, default: "0.0" },
-            runs: { type: Number, default: 0 },
-            wickets: { type: Number, default: 0 },
-            economy: { type: String, default: "0.0" }
-          }
-        ]
-      }
+      firstInnings: { type: inningsCardSchema, default: () => ({}) },
+      secondInnings: { type: inningsCardSchema, default: () => ({}) },
     },
-    
+
     // Optional array of summarized ball events for history playback
     ballHistory: [
       {
